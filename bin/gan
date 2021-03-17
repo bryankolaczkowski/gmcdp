@@ -41,12 +41,23 @@ class GAN(Model):
     self.optD    = optD
     self.optG    = optG
     self.loss_fn = loss_fn
+    # gradient penalty weight
+    self.gp_weight = 10.0
     # label smoothing values
-    self.real_min = 0.7
-    self.real_max = 1.2
-    self.fake_min = 0.0
-    self.fake_max = 0.3
+    self.real_min = 0.99
+    self.real_max = 1.01
+    self.fake_min = -1.01
+    self.fake_max = -0.99
     return
+
+  def grad_penalty(self, data):
+    with tf.GradientTape() as gp_tape:
+      gp_tape.watch(data)
+      pred = self.discriminator(data, training=True)
+    gp_grds = gp_tape.gradient(pred, [data])[0]
+    norm    = tf.sqrt(tf.reduce_sum(tf.square(gp_grds), axis=[1,2]))
+    gp      = tf.reduce_mean((norm-1.0)**2)
+    return gp
 
   def train_step(self, real_data):
     if isinstance(real_data, tuple):
@@ -56,10 +67,11 @@ class GAN(Model):
 
     # train discriminator on real data
     with tf.GradientTape() as tape:
-      labels  = tf.random.uniform((bs,1), minval=self.real_min,
-                                          maxval=self.real_max)
+      labels  = -tf.ones((bs,1))
       preds   = self.discriminator(real_data)
-      d_lossR = self.loss_fn(labels, preds)
+      cost    = self.loss_fn(labels, preds)
+      gp      = self.grad_penalty(real_data)
+      d_lossR = cost + gp * self.gp_weight
       grads   = tape.gradient(d_lossR, self.discriminator.trainable_weights)
       self.optD.apply_gradients(zip(grads,
                                     self.discriminator.trainable_weights))
@@ -70,10 +82,11 @@ class GAN(Model):
       z = tf.random.normal(shape=(bs, self.latent_dim))
       fake_data = self.generator(z)
       # train
-      labels  = tf.random.uniform((bs,1), minval=self.fake_min,
-                                          maxval=self.fake_max)
+      labels  = tf.ones((bs,1))
       preds   = self.discriminator(fake_data)
-      d_lossG = self.loss_fn(labels, preds)
+      cost    = self.loss_fn(labels, preds)
+      gp      = self.grad_penalty(fake_data)
+      d_lossG = cost + gp * self.gp_weight
       grads   = tape.gradient(d_lossG, self.discriminator.trainable_weights)
       self.optD.apply_gradients(zip(grads,
                                     self.discriminator.trainable_weights))
@@ -81,8 +94,7 @@ class GAN(Model):
     # train generator
     with tf.GradientTape() as tape:
       # create misleading labels for generator
-      misleading_labels = tf.random.uniform((bs,1), minval=self.real_min,
-                                                    maxval=self.real_max)
+      misleading_labels = -tf.ones((bs,1))
       z = tf.random.normal(shape=(bs, self.latent_dim))
       # train
       fake_preds = self.discriminator(self.generator(z))
@@ -115,12 +127,12 @@ def build_discriminator(data_dim):
   model.add(layers.Conv1D(fltrs, filtersize, padding='same',
                                              kernel_initializer=init))
   model.add(layers.LeakyReLU())
-  model.add(layers.BatchNormalization())
+  model.add(layers.LayerNormalization())
 
   model.add(layers.Conv1D(fltrs//2, filtersize, padding='same',
                                                 kernel_initializer=init))
   model.add(layers.LeakyReLU())
-  model.add(layers.BatchNormalization())
+  model.add(layers.LayerNormalization())
 
   model.add(layers.Flatten())
   model.add(layers.Dense(fltrs//2, kernel_initializer=init))
@@ -195,6 +207,11 @@ def get_real_data(filename, buffersize, batchsize, rescale):
   data = data.shuffle(buffersize).batch(batchsize)
   return data
 
+### wasserstein loss function
+@tf.function
+def wasserstein_loss(tlabs, plabs):
+  return tf.reduce_mean(tlabs * plabs)
+
 ### main -----------------------------------------------------------------------
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(
@@ -248,9 +265,10 @@ if __name__ == '__main__':
 
   # build GAN
   gan = GAN(discriminator, generator, args.latent_dim)
-  gan.compile(optimizers.Adam(learning_rate=2.0e-4, beta_1=0.5),
+  gan.compile(optimizers.RMSprop(learning_rate=2.0e-4),
               optimizers.Adam(learning_rate=2.0e-4, beta_1=0.5),
-              losses.BinaryCrossentropy(from_logits=True))
+              wasserstein_loss)
+              #losses.BinaryCrossentropy(from_logits=True))
 
   gan.summary()
 
