@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+
+import os
+libpath = os.path.normpath(                                                    \
+            os.path.join(                                                      \
+                os.path.dirname(os.path.abspath(os.path.realpath(__file__))),  \
+                '..')                                                          \
+            )
+import sys
+sys.path.append(libpath)
+
+import distutils.util
+import argparse
+import csv
+import numpy
+import matplotlib.pyplot
+
+import tensorflow       as     tf
+from   tensorflow.data  import Dataset
+from   tensorflow.keras import layers, Model, Sequential, optimizers, losses, \
+                               metrics, callbacks, initializers
+from tensorflow.keras.layers.experimental import preprocessing
+
+from   gmcdp._version     import __version__
+from   gmcdp.GausNoiseOn  import GausNoiseOn
+
+### class definitions ----------------------------------------------------------
+
+# generative adversarial network
+class GAN(Model):
+
+  def __init__(self, disc, gen, latent_dim):
+    super(GAN, self).__init__()
+    self.discriminator = disc
+    self.generator     = gen
+    self.latent_dim    = latent_dim
+    return
+
+  def compile(self, optD, optG, loss_fn):
+    super(GAN, self).compile()
+    self.optD    = optD
+    self.optG    = optG
+    self.loss_fn = loss_fn
+    # label smoothing values
+    self.real_min = 0.7
+    self.real_max = 1.2
+    self.fake_min = 0.0
+    self.fake_max = 0.3
+    return
+
+  def train_step(self, real_data):
+    if isinstance(real_data, tuple):
+      real_data = real_data[0]
+    # batch size
+    bs = tf.shape(real_data)[0]
+
+    # train discriminator on real data
+    with tf.GradientTape() as tape:
+      labels  = tf.random.uniform((bs,1), minval=self.real_min,
+                                          maxval=self.real_max)
+      preds   = self.discriminator(real_data)
+      d_lossR = self.loss_fn(labels, preds)
+      grads   = tape.gradient(d_lossR, self.discriminator.trainable_weights)
+      self.optD.apply_gradients(zip(grads,
+                                    self.discriminator.trainable_weights))
+
+    # train discriminator on fake data
+    with tf.GradientTape() as tape:
+      # generate fake data
+      z = tf.random.normal(shape=(bs, self.latent_dim))
+      fake_data = self.generator(z)
+      # train
+      labels  = tf.random.uniform((bs,1), minval=self.fake_min,
+                                          maxval=self.fake_max)
+      preds   = self.discriminator(fake_data)
+      d_lossG = self.loss_fn(labels, preds)
+      grads   = tape.gradient(d_lossG, self.discriminator.trainable_weights)
+      self.optD.apply_gradients(zip(grads,
+                                    self.discriminator.trainable_weights))
+
+    # train generator
+    with tf.GradientTape() as tape:
+      # create misleading labels for generator
+      misleading_labels = tf.random.uniform((bs,1), minval=self.real_min,
+                                                    maxval=self.real_max)
+      z = tf.random.normal(shape=(bs, self.latent_dim))
+      # train
+      fake_preds = self.discriminator(self.generator(z))
+      g_loss     = self.loss_fn(misleading_labels, fake_preds)
+      grads      = tape.gradient(g_loss, self.generator.trainable_weights)
+      self.optG.apply_gradients(zip(grads, self.generator.trainable_weights))
+
+    return {'d_loss_real':d_lossR, 'd_loss_fake':d_lossG, 'g_loss':g_loss}
+
+
+  def summary(self, line_length=None, positions=None, print_fn=None):
+    self.discriminator.summary(line_length, positions, print_fn)
+    self.generator.summary(line_length, positions, print_fn)
+    return
+
+### function definitions -------------------------------------------------------
+
+### build discriminator model
+def build_discriminator(data_dim):
+  fltrs      = 256
+  filtersize = 5
+  init       = initializers.RandomNormal(mean=0.0, stddev=0.02)
+
+  model = Sequential(name='discriminator')
+  model.add(layers.Conv1D(fltrs//4, filtersize, padding='same',
+                                                kernel_initializer=init,
+                                                input_shape=(data_dim,1,)))
+  model.add(layers.LeakyReLU())
+
+  model.add(layers.Conv1D(fltrs, filtersize, padding='same',
+                                             kernel_initializer=init))
+  model.add(layers.LeakyReLU())
+  model.add(layers.BatchNormalization())
+
+  model.add(layers.Conv1D(fltrs//2, filtersize, padding='same',
+                                                kernel_initializer=init))
+  model.add(layers.LeakyReLU())
+  model.add(layers.BatchNormalization())
+
+  model.add(layers.Flatten())
+  model.add(layers.Dense(fltrs//2, kernel_initializer=init))
+  model.add(layers.LeakyReLU())
+  model.add(layers.Dense(1, kernel_initializer=init))
+  return model
+
+
+### build a generator block
+def gen_block(inlayer, n_neurons, block_id, filtersize, use_bias, init):
+  conv = layers.Conv1DTranspose(n_neurons, filtersize,
+                                padding='same',
+                                use_bias=use_bias,
+                                kernel_initializer=init,
+                                name='convt_'+str(block_id))(inlayer)
+  bn = layers.BatchNormalization(name='bn_'+str(block_id))(conv)
+  mu = layers.LeakyReLU(name='mu_'+str(block_id))(bn)
+  mp = layers.MaxPool1D(filtersize, 1,
+                        padding='same',
+                        name='pool_'+str(block_id))(mu)
+  gn = GausNoiseOn(stddev=1.0, name='noise_'+str(block_id))(mp)
+  Lout = layers.Add(name='out_'+str(block_id))([mu,gn])
+  return Lout
+
+### build generator model
+def build_generator(data_dim, latent_dim, blocks, nrons):
+  filtersize = 5
+  use_bias   = False
+  init       = initializers.RandomNormal(mean=0.0, stddev=0.02)
+
+  Lin  = layers.Input(shape=(latent_dim,), name='gen_in')
+  Ld   = layers.Dense(data_dim*nrons, use_bias=use_bias,
+                                      kernel_initializer=init,
+                                      name='dense_in')(Lin)
+  bn   = layers.BatchNormalization(name='bn_in')(Ld)
+  af   = layers.LeakyReLU(name='relu_in')(bn)
+  tout = layers.Reshape((data_dim, nrons), name='reshape_in')(af)
+
+  for i in range(blocks):
+    if i == 0:
+      tout = gen_block(tout, nrons, i, filtersize, use_bias, init)
+    else:
+      tout = gen_block(tout, nrons//2, i, filtersize, use_bias, init)
+
+  Lout = layers.Conv1DTranspose(1, filtersize,
+                                padding='same',
+                                use_bias=use_bias,
+                                kernel_initializer=init,
+                                activation='tanh',
+                                name='gen_out')(tout)
+
+  return Model(inputs=Lin, outputs=Lout, name='generator')
+
+
+### show samples from generator
+def show_samples(epoch, generator, latent_dim, points_list):
+  if epoch %20 == 0:
+    z = tf.random.normal(shape=(1, latent_dim))
+    generated_data = generator(z)
+    points_list.append(generated_data)
+    return
+
+### build Dataset from data file
+def get_real_data(filename, buffersize, batchsize, rescale):
+  indata = []
+  with open(filename, 'r') as handle:
+    reader = csv.reader(handle)
+    for row in reader:
+      indata.append([[float(x)] for x in row])
+  data = Dataset.from_tensor_slices(indata)
+  data = data.map(lambda x: rescale(x, training=True))
+  data = data.shuffle(buffersize).batch(batchsize)
+  return data
+
+### main -----------------------------------------------------------------------
+if __name__ == '__main__':
+  parser = argparse.ArgumentParser(
+                description='calculates profiles from a pssm txt file',
+                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+  parser.add_argument('--version', action='version', version=__version__)
+
+  parser.add_argument('-f', '--file', dest='file', help='data file',
+                      metavar='DATA.csv', required=True)
+
+  parser.add_argument('--buffer_size', dest='buffer_size', type=int,
+                      help='data shuffling buffer', metavar='N')
+  parser.add_argument('--batch_size', dest='batch_size', type=int,
+                      help='training batch size', metavar='N')
+
+  parser.add_argument('--data_dim', dest='data_dim', type=int,
+                      help='size of data vector', metavar='N')
+  parser.add_argument('--latent_dim', dest='latent_dim', type=int,
+                      help='size of noise vector', metavar='N')
+
+  parser.add_argument('--gen_blocks', dest='gen_blocks', type=int,
+                      help='number of generator blocks', metavar='N')
+  parser.add_argument('--filters', dest='n_filters', type=int,
+                      help='number of neurons or filters', metavar='N')
+
+  parser.set_defaults(file=None,
+                      buffer_size=10000,
+                      batch_size=128,
+                      data_dim=256,
+                      latent_dim=32,
+                      gen_blocks=3,
+                      n_filters=128)
+
+  args = parser.parse_args()
+
+  # get 'real' data, rescaled from 0,1 to -1,1
+  # so it is consistent with tanh activation in the generator
+  rescale = Sequential([preprocessing.Rescaling(2, offset=-1)])
+  train_data = get_real_data(args.file,
+                             args.buffer_size,
+                             args.batch_size,
+                             rescale)
+  print(train_data.element_spec)
+
+  # build discriminator and generator models
+  discriminator = build_discriminator(args.data_dim)
+  generator     = build_generator(args.data_dim,
+                                  args.latent_dim,
+                                  args.gen_blocks,
+                                  args.n_filters)
+
+  # build GAN
+  gan = GAN(discriminator, generator, args.latent_dim)
+  gan.compile(optimizers.Adam(learning_rate=2.0e-4, beta_1=0.5),
+              optimizers.Adam(learning_rate=2.0e-4, beta_1=0.5),
+              losses.BinaryCrossentropy(from_logits=True))
+
+  gan.summary()
+
+
+  ## WORKING...
+
+  generated_points_list = []
+  cbk = callbacks.LambdaCallback(on_epoch_end=lambda epoch,logs: show_samples(epoch, gan.generator, args.latent_dim, generated_points_list))
+
+  gan.fit(train_data, epochs=1000, callbacks=[cbk], verbose=True)
+
+  points = generated_points_list[-1].numpy().ravel()
+  matplotlib.pyplot.plot(numpy.linspace(1,args.data_dim,num=args.data_dim), points, 'bo')
+  matplotlib.pyplot.show()

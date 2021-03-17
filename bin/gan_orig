@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+
+import distutils.util
+import argparse
+import csv
+import time
+
+import tensorflow
+from   tensorflow       import keras
+from   tensorflow       import data
+from   tensorflow.keras import layers, Sequential, losses, optimizers
+from   tensorflow.data  import Dataset
+
+BUFFER_SIZE = 10000
+BATCH_SIZE  = 128
+NOISE_DIM   = 100
+DATA_DIM    = 500
+
+EPOCHS      = 50
+
+### model generation
+
+def make_gen():
+  model = Sequential()
+  model.add(layers.Dense(DATA_DIM*128, use_bias=False, input_shape=(NOISE_DIM,)))
+  model.add(layers.BatchNormalization())
+  model.add(layers.LeakyReLU())
+
+  model.add(layers.Reshape((DATA_DIM,128)))
+  model.add(layers.Conv1DTranspose(64, 3, strides=1, padding='same', use_bias=False))
+  model.add(layers.BatchNormalization())
+  model.add(layers.LeakyReLU())
+
+  model.add(layers.Conv1DTranspose(32, 3, strides=1, padding='same', use_bias=False))
+  model.add(layers.BatchNormalization())
+  model.add(layers.LeakyReLU())
+
+  model.add(layers.Conv1DTranspose(1, 3, strides=1, padding='same', use_bias=False, activation='tanh'))
+  return model
+
+def make_disc():
+  model = Sequential()
+  model.add(layers.Conv1D(64, 3, strides=1, padding='same', input_shape=(DATA_DIM,1,)))
+  model.add(layers.LeakyReLU())
+  model.add(layers.Dropout(0.3))
+
+  model.add(layers.Conv1D(128, 3, strides=1, padding='same'))
+  model.add(layers.LeakyReLU())
+  model.add(layers.Dropout(0.3))
+
+  model.add(layers.Flatten())
+  model.add(layers.Dense(1))
+  return model
+
+
+### setup
+
+parser = argparse.ArgumentParser(
+                  description='calculates profiles from a pssm txt file',
+                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+parser.add_argument('-f', '--file', dest='file', help='data file',
+                    metavar='DATA.csv', required=True)
+
+parser.set_defaults(file=None)
+args = parser.parse_args()
+
+# get 'real' data
+indata = []
+with open(args.file, 'r') as handle:
+  reader = csv.reader(handle)
+  for row in reader:
+    indata.append([[float(x)] for x in row])
+
+train_data = Dataset.from_tensor_slices(indata).shuffle(BUFFER_SIZE).batch(BATCH_SIZE)
+
+print(train_data.element_spec)
+
+generator = make_gen()
+discriminator = make_disc()
+
+print(generator.output_shape)
+
+### training
+
+cross_entropy = losses.BinaryCrossentropy(from_logits=True)
+
+def discriminator_loss(real_out, fake_out):
+  real_loss = cross_entropy(tensorflow.ones_like(real_out), real_out)
+  fake_loss = cross_entropy(tensorflow.zeros_like(fake_out), fake_out)
+  totl_loss = real_loss + fake_loss
+  return totl_loss
+
+def generator_loss(fake_out):
+  return cross_entropy(tensorflow.ones_like(fake_out), fake_out)
+
+generator_optimizer = optimizers.Adam(1e-4)
+discriminator_optimizer = optimizers.Adam(1e-4)
+
+@tensorflow.function
+def train_step(data):
+  noise = tensorflow.random.normal((BATCH_SIZE, NOISE_DIM))
+
+  with tensorflow.GradientTape() as gen_tape, tensorflow.GradientTape() as disc_tape:
+    gen_data = generator(noise, training=True)
+
+    real_out = discriminator(data, training=True)
+    fake_out = discriminator(gen_data, training=True)
+
+    gen_loss  = generator_loss(fake_out)
+    disc_loss = discriminator_loss(real_out, fake_out)
+
+  gradients_of_generator = gen_tape.gradient(gen_loss, generator.trainable_variables)
+  gradients_of_discriminator = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
+
+  generator_optimizer.apply_gradients(zip(gradients_of_generator, generator.trainable_variables))
+  discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))
+
+
+rseed = tensorflow.random.normal([1, NOISE_DIM])
+tdata = list(train_data.take(1).as_numpy_iterator())
+print(tdata)
+
+def train(dataset, epochs):
+  for epoch in range(epochs):
+    start = time.time()
+
+    for batch in dataset:
+      train_step(batch)
+
+    print('epoch {} time: {:.2f} sec'.format(epoch+1, time.time()-start))
+    gen_data = generator(rseed, training=True)
+    real_out = discriminator(tdata, training=True)
+    fake_out = discriminator(gen_data, training=True)
+    gen_loss  = generator_loss(fake_out)
+    disc_loss = discriminator_loss(real_out, fake_out)
+    print('  gen_loss: {:.4f}, disc_loss: {:.4f}'.format(gen_loss.numpy(), disc_loss.numpy()))
+
+train(train_data, EPOCHS)
+
+
+### generator example
+out = generator(rseed, training=False)
+print(out)
