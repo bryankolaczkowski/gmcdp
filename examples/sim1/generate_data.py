@@ -38,9 +38,9 @@ def make_data(outfname, perturb_up):
   # plot a random example dataset against the sorted column means
   sorted_col_means = numpy.sort(col_means[-1])[::-1]
   norm_col_means   = sorted_col_means / numpy.sum(sorted_col_means)
-  plt.plot(numpy.linspace(1,ntaxa,num=ntaxa), norm_col_means, 'bo')
+  plt.plot(numpy.linspace(1,ntaxa,num=ntaxa), -numpy.log(norm_col_means), 'bo')
   rnd_idx = numpy.random.choice(nsamp)
-  plt.plot(numpy.linspace(1,ntaxa,num=ntaxa), norm_data[rnd_idx,:], 'ro')
+  plt.plot(numpy.linspace(1,ntaxa,num=ntaxa), -numpy.log(norm_data[rnd_idx,:]), 'ro')
   plt.show()
 
   # write data to file

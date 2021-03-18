@@ -181,7 +181,7 @@ def build_generator(data_dim, latent_dim, blocks, nrons):
                                 padding='same',
                                 use_bias=use_bias,
                                 kernel_initializer=init,
-                                activation='tanh',
+                                activation='relu',
                                 name='gen_out')(tout)
 
   return Model(inputs=Lin, outputs=Lout, name='generator')
@@ -196,14 +196,14 @@ def show_samples(epoch, generator, latent_dim, points_list):
     return
 
 ### build Dataset from data file
-def get_real_data(filename, buffersize, batchsize, rescale):
+def get_real_data(filename, buffersize, batchsize):
   indata = []
   with open(filename, 'r') as handle:
     reader = csv.reader(handle)
     for row in reader:
       indata.append([[float(x)] for x in row])
   data = Dataset.from_tensor_slices(indata)
-  data = data.map(lambda x: rescale(x, training=True))
+  data = data.map(lambda x: -tf.math.log(x))
   data = data.shuffle(buffersize).batch(batchsize)
   return data
 
@@ -249,11 +249,9 @@ if __name__ == '__main__':
 
   # get 'real' data, rescaled from 0,1 to -1,1
   # so it is consistent with tanh activation in the generator
-  rescale = Sequential([preprocessing.Rescaling(2, offset=-1)])
   train_data = get_real_data(args.file,
                              args.buffer_size,
-                             args.batch_size,
-                             rescale)
+                             args.batch_size)
   print(train_data.element_spec)
 
   # build discriminator and generator models
