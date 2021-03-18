@@ -119,7 +119,7 @@ def build_discriminator(data_dim):
   init       = initializers.RandomNormal(mean=0.0, stddev=0.02)
 
   model = Sequential(name='discriminator')
-  model.add(layers.Conv1D(fltrs//4, filtersize, padding='same',
+  model.add(layers.Conv1D(fltrs//2, filtersize, padding='same',
                                                 kernel_initializer=init,
                                                 input_shape=(data_dim,1,)))
   model.add(layers.LeakyReLU())
@@ -158,7 +158,7 @@ def gen_block(inlayer, n_neurons, block_id, filtersize, use_bias, init):
   return Lout
 
 ### build generator model
-def build_generator(data_dim, latent_dim, blocks, nrons):
+def build_generator(data_dim, blocks, nrons):
   filtersize = 5
   use_bias   = False
   init       = initializers.RandomNormal(mean=0.0, stddev=0.02)
@@ -225,40 +225,40 @@ if __name__ == '__main__':
                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   parser.add_argument('--version', action='version', version=__version__)
 
+  # data source
   parser.add_argument('-f', '--file', dest='file', help='data file',
                       metavar='DATA.csv', required=True)
+  parser.add_argument('--data_dim', dest='data_dim', type=int,
+                      help='size of data vector', metavar='N')
 
+  # data pre-processing
   parser.add_argument('--buffer_size', dest='buffer_size', type=int,
                       help='data shuffling buffer', metavar='N')
   parser.add_argument('--batch_size', dest='batch_size', type=int,
                       help='training batch size', metavar='N')
 
-  parser.add_argument('--data_dim', dest='data_dim', type=int,
-                      help='size of data vector', metavar='N')
-  parser.add_argument('--latent_dim', dest='latent_dim', type=int,
-                      help='size of noise vector', metavar='N')
-
+  # neural network architecture
   parser.add_argument('--gen_blocks', dest='gen_blocks', type=int,
                       help='number of generator blocks', metavar='N')
   parser.add_argument('--filters', dest='n_filters', type=int,
                       help='number of neurons or filters', metavar='N')
 
+  # training regime
   parser.add_argument('--epochs', dest='epochs', type=int,
                       help='number of training epochs', metavar='N')
 
   parser.set_defaults(file=None,
+                      data_dim=256,
                       buffer_size=10000,
                       batch_size=128,
                       data_dim=256,
-                      latent_dim=64,
                       gen_blocks=3,
-                      n_filters=256,
+                      n_filters=128,
                       epochs=1000)
 
   args = parser.parse_args()
 
-  # get 'real' data, rescaled from 0,1 to -1,1
-  # so it is consistent with tanh activation in the generator
+  # get 'real' data
   train_data = get_real_data(args.file,
                              args.buffer_size,
                              args.batch_size)
@@ -267,12 +267,11 @@ if __name__ == '__main__':
   # build discriminator and generator models
   discriminator = build_discriminator(args.data_dim)
   generator     = build_generator(args.data_dim,
-                                  args.latent_dim,
                                   args.gen_blocks,
                                   args.n_filters)
 
   # build GAN
-  gan = GAN(discriminator, generator, args.latent_dim)
+  gan = GAN(discriminator, generator, args.data_dim)
   gan.compile(optimizers.Adam(learning_rate=2.0e-4, beta_1=0.5),
               optimizers.Adam(learning_rate=2.0e-4, beta_1=0.5),
               wasserstein_loss)
