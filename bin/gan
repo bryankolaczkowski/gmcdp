@@ -199,7 +199,7 @@ def build_generator(data_dim, blocks, nrons):
 
 ### store samples from generator in points_list
 def store_samples(epoch, logs, generator, z, points_list, log_lists):
-  every = 2
+  every = 20
   if epoch % every == 0:
     generated_data = generator(z).numpy()
     points_list.append(generated_data)
@@ -366,5 +366,5 @@ if __name__ == '__main__':
                        interval=200)
   plt.show()
 
-  writer = PillowWriter(fps=2)
+  writer = PillowWriter(fps=4)
   anim.save('out.gif', writer=writer)
