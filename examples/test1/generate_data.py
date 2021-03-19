@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import numpy
+import scipy.stats
 import matplotlib.pyplot
 
 ntaxa = 32
@@ -17,15 +18,19 @@ col_means = numpy.mean(rawdata, axis=0, keepdims=True)
 sort_idxs = numpy.argsort(col_means.min(axis=0))[::-1]
 
 sort_data = rawdata[:,sort_idxs]
-norm_data = sort_data / (numpy.sum(sort_data, axis=1)[0])
+geo_means = scipy.stats.gmean(sort_data, axis=1)
+norm_data = numpy.log(numpy.divide(sort_data, geo_means[:,numpy.newaxis]))
+
+#norm_data = sort_data / (numpy.sum(sort_data, axis=1)[0])
 
 sorted_col_means = numpy.sort(col_means[-1])[::-1]
-norm_col_means   = sorted_col_means / numpy.sum(sorted_col_means)
-matplotlib.pyplot.plot(numpy.linspace(1,ntaxa,num=ntaxa),
-                      -numpy.log(norm_col_means), 'bo')
+geo_col_means    = scipy.stats.gmean(sorted_col_means)
+norm_col_means   = numpy.log(numpy.divide(sorted_col_means, geo_col_means))
+
+x = numpy.linspace(1,ntaxa,num=ntaxa)
+matplotlib.pyplot.plot(x, norm_col_means, 'bo')
 for i in range(10):
-  matplotlib.pyplot.plot(numpy.linspace(1,ntaxa,num=ntaxa),
-                        -numpy.log(norm_data[i,:]), 'ro', markersize=2)
+  matplotlib.pyplot.plot(x, norm_data[i,:], 'ro', markersize=2)
 matplotlib.pyplot.show()
 
 numpy.savetxt('data.csv', norm_data, fmt='%.4f', delimiter=',')
