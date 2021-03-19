@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import numpy
+import scipy.stats
 import matplotlib.pyplot as plt
 
 ntaxa = 256    # number of taxa in 'relative abundance' data
@@ -22,25 +23,32 @@ def make_data(outfname, perturb_up):
   # perturb some taxa
   npert = 10
   ptaxa = numpy.arange(100,120)
-  pvalu = 0.995
+  pvalu = 0.996
   if perturb_up:
-    ptaxa = numpy.arange(180,200)
-    pvalu = 1.005
+    ptaxa = numpy.arange(140,160)
+    pvalu = 1.004
 
   for idx in range(nsamp):
     pidxs = numpy.random.choice(ptaxa,npert)
     for idx2 in pidxs:
       sort_data[idx,idx2] *= pvalu
 
-  # normalize data so 'relative abundances' sum to 1.0
-  norm_data = sort_data / (numpy.sum(sort_data, axis=1)[0])
+  # normalize data using CLR (centered log ratio)
+  geo_means = scipy.stats.gmean(sort_data, axis=1)
+  norm_data = numpy.log(numpy.divide(sort_data, geo_means[:,numpy.newaxis]))
 
-  # plot a random example dataset against the sorted column means
+  # plot a random example datasets against the sorted column means
   sorted_col_means = numpy.sort(col_means[-1])[::-1]
-  norm_col_means   = sorted_col_means / numpy.sum(sorted_col_means)
-  plt.plot(numpy.linspace(1,ntaxa,num=ntaxa), -numpy.log(norm_col_means), 'bo')
-  rnd_idx = numpy.random.choice(nsamp)
-  plt.plot(numpy.linspace(1,ntaxa,num=ntaxa), -numpy.log(norm_data[rnd_idx,:]), 'ro')
+  geo_col_means    = scipy.stats.gmean(sorted_col_means)
+  norm_col_means   = numpy.log(numpy.divide(sorted_col_means, geo_col_means))
+
+  x = numpy.linspace(1,ntaxa,num=ntaxa)
+  plt.plot(x, norm_col_means, 'bo')
+
+  for i in range(10):
+    rnd_idx = numpy.random.choice(nsamp)
+    plt.plot(x, norm_data[rnd_idx,:], 'ro', markersize=2)
+
   plt.show()
 
   # write data to file

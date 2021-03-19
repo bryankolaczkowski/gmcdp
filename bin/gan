@@ -14,8 +14,9 @@ import argparse
 import csv
 import numpy
 
+import matplotlib
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
+from matplotlib.animation import FuncAnimation, PillowWriter
 
 import tensorflow       as     tf
 from   tensorflow.data  import Dataset
@@ -191,18 +192,20 @@ def build_generator(data_dim, blocks, nrons):
                                 padding='same',
                                 use_bias=use_bias,
                                 kernel_initializer=init,
-                                activation='relu',
                                 name='gen_out')(tout)
 
   return Model(inputs=Lin, outputs=Lout, name='generator')
 
 
 ### store samples from generator in points_list
-def store_samples(epoch, generator, z, points_list):
-  every = 10
-  if epoch %10 == 0:
+def store_samples(epoch, logs, generator, z, points_list, log_lists):
+  every = 2
+  if epoch % every == 0:
     generated_data = generator(z).numpy()
     points_list.append(generated_data)
+    for k in log_lists.keys():
+      if k in logs.keys():
+        log_lists[k].append(logs[k])
     return
 
 ### build Dataset from data file
@@ -213,7 +216,6 @@ def get_real_data(filename, buffersize, batchsize):
     for row in reader:
       indata.append([[float(x)] for x in row])
   data = Dataset.from_tensor_slices(indata)
-  data = data.map(lambda x: -tf.math.log(x))
   data = data.shuffle(buffersize).batch(batchsize)
   return data
 
@@ -282,45 +284,87 @@ if __name__ == '__main__':
   gan.summary()
 
   # set up generator logging
-  n_samples = 10
+  n_samples = 3
   real_points_list = [ x.ravel() for x in tfds.as_numpy(train_data.take(1)\
                                                         .unbatch()\
                                                         .take(n_samples)) ]
   sample_zs = tf.random.normal(shape=(n_samples, args.data_dim))
 
   gen_points_list = []
+  log_lists = {'d_loss_real':[], 'd_loss_fake':[], 'g_loss':[]}
   cbk = callbacks.LambdaCallback(on_epoch_end=lambda epoch,logs: \
-                                              store_samples(epoch,
+                                              store_samples(epoch, logs,
                                                             gan.generator,
                                                             sample_zs,
-                                                            gen_points_list))
+                                                            gen_points_list,
+                                                            log_lists))
 
   # fit generative adverserial network
   gan.fit(train_data, epochs=args.epochs, callbacks=[cbk], verbose=True)
 
-  # plot results
-  x = numpy.linspace(1,args.data_dim,num=args.data_dim)
+  ### plot results
+  matplotlib.rcParams.update({'font.size':8})
 
-  fig,axs = plt.subplots(nrows=2, ncols=n_samples, sharex=True, sharey=True)
+  x = numpy.linspace(1, args.data_dim, num=args.data_dim)
+  gens = numpy.arange(0, len(gen_points_list))
+
+  fig,axs = plt.subplots(nrows=3, ncols=n_samples, figsize=(n_samples,3),
+                         sharex=True, sharey=True)
+
+  # set up example data logging
   axs[0,0].set_ylabel('real data')
-  axs[1,0].set_ylabel('sim data')
+  axs[1,0].set_ylabel('fake data')
   dyn_data = []
   for i in range(n_samples):
+    axs[0,i].get_xaxis().set_ticks([])
+    axs[0,i].get_yaxis().set_ticks([])
+    axs[1,i].get_xaxis().set_ticks([])
+    axs[1,i].get_yaxis().set_ticks([])
     ax = axs[0,i]
     y  = real_points_list[i]
-    ax.plot(x,y, 'bo', markersize=2)
-    dd, = axs[1,i].plot([],[], 'ro', markersize=2)
+    ax.plot(x,y, 'bo', markersize=1)
+    dd, = axs[1,i].plot([],[], 'ro', markersize=1)
     dyn_data.append(dd)
 
+  # set up loss logging
+  lsax = plt.subplot2grid((3,n_samples), (2,0), colspan=n_samples)
+  lsax.set_xlim([0, len(gen_points_list)-1])
+  min_loss = numpy.amin([x for x in log_lists.values()])
+  max_loss = numpy.amax([x for x in log_lists.values()])
+  lsax.set_ylim([min_loss, max_loss])
+  lsax.set_ylabel('loss')
+  lsax.set_xlabel('generation')
+  lsax.get_xaxis().set_ticks([])
+  lsax.get_yaxis().set_ticks([])
+  for loss in log_lists.keys():
+    dd, = lsax.plot([],[], linewidth=0.5, label=loss)
+    dyn_data.append(dd)
+  lsax.legend(loc='upper left', borderpad=0.2,
+                                labelspacing=0.2,
+                                handlelength=0.5,
+                                handletextpad=0.2)
+
+  plt.tight_layout()
+
   def update(data_idx):
+    # example data
     data = gen_points_list[data_idx]
     for i in range(n_samples):
       y  = data[i,:,:].ravel()
       dyn_data[i].set_data(x,y)
-      fig.suptitle('generation {}'.format(data_idx))
+    # losses
+    loss_x = gens[:data_idx+1]
+    i = n_samples
+    for loss in log_lists.values():
+      loss_y = loss[:data_idx+1]
+      dyn_data[i].set_data(loss_x, loss_y)
+      i += 1
     return dyn_data,
 
   anim = FuncAnimation(fig, update,
                        frames=numpy.arange(0,len(gen_points_list)),
                        interval=200)
   plt.show()
+
+  writer = PillowWriter(fps=2)
+  anim.save('out.gif', writer=writer)

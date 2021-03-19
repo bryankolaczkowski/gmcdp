@@ -21,8 +21,6 @@ sort_data = rawdata[:,sort_idxs]
 geo_means = scipy.stats.gmean(sort_data, axis=1)
 norm_data = numpy.log(numpy.divide(sort_data, geo_means[:,numpy.newaxis]))
 
-#norm_data = sort_data / (numpy.sum(sort_data, axis=1)[0])
-
 sorted_col_means = numpy.sort(col_means[-1])[::-1]
 geo_col_means    = scipy.stats.gmean(sorted_col_means)
 norm_col_means   = numpy.log(numpy.divide(sorted_col_means, geo_col_means))
