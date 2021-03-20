@@ -277,8 +277,8 @@ if __name__ == '__main__':
 
   # build GAN
   gan = GAN(discriminator, generator, args.data_dim)
-  gan.compile(optimizers.Adam(learning_rate=2.0e-4, beta_1=0.5),
-              optimizers.Adam(learning_rate=2.0e-4, beta_1=0.5),
+  gan.compile(optimizers.RMSprop(learning_rate=2.0e-4),
+              optimizers.RMSprop(learning_rate=2.0e-4),
               wasserstein_loss)
 
   gan.summary()
