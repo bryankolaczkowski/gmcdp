@@ -302,6 +302,10 @@ if __name__ == '__main__':
   # fit generative adverserial network
   gan.fit(train_data, epochs=args.epochs, callbacks=[cbk], verbose=True)
 
+  # save generator and discriminator
+  gan.generator.save('gen.model')
+  gan.discriminator.save('disc.model')
+
   ### plot results
   matplotlib.rcParams.update({'font.size':8})
 
