@@ -48,11 +48,8 @@ class GAN(Model):
     self.loss_fn = loss_fn
     # gradient penalty weight
     self.gp_weight = 10.0
-    # label smoothing values
-    self.real_min = 0.99
-    self.real_max = 1.01
-    self.fake_min = -1.01
-    self.fake_max = -0.99
+    # number of iterations to train discriminator per generator iteration
+    self.disc_iter = 2
     return
 
   def grad_penalty(self, data):
@@ -70,33 +67,35 @@ class GAN(Model):
     # batch size
     bs = tf.shape(real_data)[0]
 
-    # train discriminator on real data
-    with tf.GradientTape() as tape:
-      labels  = -tf.ones((bs,1))
-      preds   = self.discriminator(real_data, training=True)
-      cost    = self.loss_fn(labels, preds)
-      gp      = self.grad_penalty(real_data)
-      d_lossR = cost + gp * self.gp_weight
-      grads   = tape.gradient(d_lossR, self.discriminator.trainable_weights)
-      self.optD.apply_gradients(zip(grads,
-                                    self.discriminator.trainable_weights))
+    # train discriminator disc_iter times
+    for iter in range(self.disc_iter):
+      # train discriminator on real data
+      with tf.GradientTape() as tape:
+        labels  = -tf.ones((bs,1))
+        preds   = self.discriminator(real_data, training=True)
+        cost    = self.loss_fn(labels, preds)
+        gp      = self.grad_penalty(real_data)
+        d_lossR = cost + gp * self.gp_weight
+        grads   = tape.gradient(d_lossR, self.discriminator.trainable_weights)
+        self.optD.apply_gradients(zip(grads,
+                                      self.discriminator.trainable_weights))
 
-    # train discriminator on fake data
-    with tf.GradientTape() as tape:
-      # generate fake data
-      z = tf.random.normal(shape=(bs, self.latent_dim))
-      fake_data = self.generator(z, training=True)
-      # train
-      labels  = tf.ones((bs,1))
-      preds   = self.discriminator(fake_data, training=True)
-      cost    = self.loss_fn(labels, preds)
-      gp      = self.grad_penalty(fake_data)
-      d_lossG = cost + gp * self.gp_weight
-      grads   = tape.gradient(d_lossG, self.discriminator.trainable_weights)
-      self.optD.apply_gradients(zip(grads,
-                                    self.discriminator.trainable_weights))
+      # train discriminator on fake data
+      with tf.GradientTape() as tape:
+        # generate fake data
+        z = tf.random.normal(shape=(bs, self.latent_dim))
+        fake_data = self.generator(z, training=True)
+        # train
+        labels  = tf.ones((bs,1))
+        preds   = self.discriminator(fake_data, training=True)
+        cost    = self.loss_fn(labels, preds)
+        gp      = self.grad_penalty(fake_data)
+        d_lossG = cost + gp * self.gp_weight
+        grads   = tape.gradient(d_lossG, self.discriminator.trainable_weights)
+        self.optD.apply_gradients(zip(grads,
+                                      self.discriminator.trainable_weights))
 
-    # train generator
+    # train generator once
     with tf.GradientTape() as tape:
       # create misleading labels for generator
       misleading_labels = -tf.ones((bs,1))
@@ -277,8 +276,8 @@ if __name__ == '__main__':
 
   # build GAN
   gan = GAN(discriminator, generator, args.data_dim)
-  gan.compile(optimizers.RMSprop(learning_rate=2.0e-4),
-              optimizers.RMSprop(learning_rate=2.0e-4),
+  gan.compile(optimizers.Adam(learning_rate=1.0e-4, beta_1=0.0, beta_2=0.9),
+              optimizers.Adam(learning_rate=1.0e-4, beta_1=0.0, beta_2=0.9),
               wasserstein_loss)
 
   gan.summary()
