@@ -301,6 +301,11 @@ if __name__ == '__main__':
   # fit generative adverserial network
   gan.fit(train_data, epochs=args.epochs, callbacks=[cbk], verbose=True)
 
+  # save generator model
+  genfname = args.file + '.gen.model'
+  gan.generator.save(genfname)
+
+
   ### plot results
   matplotlib.rcParams.update({'font.size':8})
 
@@ -366,4 +371,5 @@ if __name__ == '__main__':
   plt.show()
 
   writer = PillowWriter(fps=4)
-  anim.save('out.gif', writer=writer)
+  gifname = args.file + '.out.gif'
+  anim.save(gifname, writer=writer)
