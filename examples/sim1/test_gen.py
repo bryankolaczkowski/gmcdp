@@ -48,7 +48,7 @@ def test_gen(perturb_up, n_samples):
   real_data = gen_data(perturb_up, n_samples)
 
   ## load model
-  mfname = 'data' + str(idnum) + '.gen.model'
+  mfname = 'data' + str(idnum) + '.csv.gen.model'
   generator = tf.keras.models.load_model(mfname)
   generator.summary()
 
@@ -97,8 +97,8 @@ if __name__ == '__main__':
   plot_data(real_data, fake_data, axs[0])
 
   perturb_up = True
-  real_data,fake_data = test_gen(perturb_up, n_samples)
-  plot_data(real_data, fake_data, axs[1])
+  #real_data,fake_data = test_gen(perturb_up, n_samples)
+  #plot_data(real_data, fake_data, axs[1])
 
   plt.tight_layout()
   plt.show()
