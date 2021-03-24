@@ -51,7 +51,7 @@ class SpectralNormalization(tf.keras.layers.Wrapper):
       AttributeError: If `layer` does not has `kernel` or `embeddings` attribute.
     """
 
-    def __init__(self, layer: tf.keras.layers, power_iterations=1, **kwargs):
+    def __init__(self, layer: tf.keras.layers, power_iterations=2, **kwargs):
         super().__init__(layer, **kwargs)
         if power_iterations <= 0:
             raise ValueError(

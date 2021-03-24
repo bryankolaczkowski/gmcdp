@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+import os
+os.environ["CUDA_VISIBLE_DEVICES"]="-1"
+
 import numpy
 import scipy.stats
 import tensorflow        as tf
@@ -88,7 +91,7 @@ def plot_data(real_data, fake_data, axs):
 
 
 if __name__ == '__main__':
-  n_samples = 2000
+  n_samples = 1000
   perturb_up = False
 
   fig,axs = plt.subplots(nrows=2, ncols=2, sharex=False, sharey=False)
