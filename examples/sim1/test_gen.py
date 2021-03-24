@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import sys
 import os
 os.environ["CUDA_VISIBLE_DEVICES"]="-1"
 
@@ -42,7 +43,7 @@ def gen_data(perturb_up, nsamp):
   return norm_data
 
 
-def test_gen(perturb_up, n_samples):
+def test_gen(perturb_up, n_samples, gen):
   idnum = 0
   if perturb_up:
     idnum = 1
@@ -51,7 +52,10 @@ def test_gen(perturb_up, n_samples):
   real_data = gen_data(perturb_up, n_samples)
 
   ## load model
-  mfname = 'data' + str(idnum) + '.csv.gen.model'
+  mstr = str(gen)
+  if gen < 0:
+    mstr = ''
+  mfname = 'data' + str(idnum) + '.csv.gen.model' + mstr
   generator = tf.keras.models.load_model(mfname)
   generator.summary()
 
@@ -91,16 +95,18 @@ def plot_data(real_data, fake_data, axs):
 
 
 if __name__ == '__main__':
+  gen = int(sys.argv[1])
+
   n_samples = 1000
   perturb_up = False
 
   fig,axs = plt.subplots(nrows=2, ncols=2, sharex=False, sharey=False)
 
-  real_data,fake_data = test_gen(perturb_up, n_samples)
+  real_data,fake_data = test_gen(perturb_up, n_samples, gen)
   plot_data(real_data, fake_data, axs[0])
 
   perturb_up = True
-  #real_data,fake_data = test_gen(perturb_up, n_samples)
+  #real_data,fake_data = test_gen(perturb_up, n_samples, gen)
   #plot_data(real_data, fake_data, axs[1])
 
   plt.tight_layout()
