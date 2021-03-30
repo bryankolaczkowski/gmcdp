@@ -257,12 +257,30 @@ def store_model(epoch, logs, generator, genfname):
 
 ### build Dataset from data file
 def get_real_data(filename, buffersize, batchsize):
-  indata = []
+  indatas = []
+  targets = []
   with open(filename, 'r') as handle:
     reader = csv.reader(handle)
+    # parse header
+    target_cols = []
+    indata_cols = []
+    headrow = next(reader)
+    for idx in range(len(headrow)):
+      label = headrow[idx]
+      if label == 'id':
+        continue
+      if label.find('target') == 0:
+        target_cols.append(idx)
+      else:
+        indata_cols.append(idx)
+    # parse data
     for row in reader:
-      indata.append([[float(x)] for x in row])
-  data = Dataset.from_tensor_slices(indata)
+      trgts = [ int(row[i]) for i in target_cols ]
+      datas = [ [float(row[i])] for i in indata_cols]
+      targets.append(trgts)
+      indatas.append(datas)
+  # package in tensorflow Dataset
+  data = Dataset.from_tensor_slices((indatas, targets))
   data = data.shuffle(buffersize).batch(batchsize)
   return data
 
@@ -333,12 +351,14 @@ if __name__ == '__main__':
   if not args.verbose:
     os.environ['TF_CPP_MIN_LOG_LEVEL']='1'
 
-  # get 'real' data
+  # get 'real' labelled data
   train_data = get_real_data(args.file,
                              args.buffer_size,
                              args.batch_size)
   if args.verbose:
     print(train_data.element_spec)
+
+  sys.exit(0)
 
   # build discriminator and generator models
   # sp implements spectral normalization of discriminator weights
