@@ -21,8 +21,7 @@ from   tensorflow.keras import layers, Model, Sequential, optimizers, losses, \
 from tensorflow.keras.layers.experimental import preprocessing
 
 from   gmcdp._version     import __version__
-from   gmcdp.GausNoiseOn  import GausNoiseOn
-from   gmcdp.spectral_normalization import SpectralNormalization
+from   gmcdp.customlayers import GausNoiseOn, SpectralNormalization
 
 ### class definitions ----------------------------------------------------------
 
