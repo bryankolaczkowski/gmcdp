@@ -27,18 +27,18 @@ from   gmcdp.generator    import buildGenerator
 ### class definitions ----------------------------------------------------------
 
 # generative adversarial network
-class GAN(Model):
+# with binary label
+class biGAN(Model):
 
-  def __init__(self, disc, gen, latent_dim, gradpenalty):
-    super(GAN, self).__init__()
+  def __init__(self, disc, gen, gradpenalty):
+    super(biGAN, self).__init__()
     self.discriminator = disc
     self.generator     = gen
-    self.latent_dim    = latent_dim
     self.gradpenalty   = gradpenalty
     return
 
   def compile(self, optD, optG, loss_fn):
-    super(GAN, self).compile()
+    super(biGAN, self).compile()
     self.optD    = optD
     self.optG    = optG
     self.loss_fn = loss_fn
@@ -47,6 +47,9 @@ class GAN(Model):
     return
 
   def grad_penalty(self, data):
+    """
+    data has shape ((batches,data_dim,1),(batches,1))
+    """
     with tf.GradientTape() as gp_tape:
       gp_tape.watch(data)
       pred = self.discriminator(data, training=True)
@@ -57,11 +60,21 @@ class GAN(Model):
     gp      = tf.reduce_mean((norm-1.0)**2)
     return gp
 
+  def rnd_latentLabels(self, batchsize):
+    """
+    generate batchsize random labels from {0,1}
+    """
+    lbls = tf.math.rint(tf.random.uniform(shape=(batchsize,1)))
+    return lbls
+
   def train_step(self, real_data):
-    #if isinstance(real_data, tuple):
-    #    real_data = real_data[0]
+    """
+    real_data has shape ((batches,data_dim,1),(batches,1))
+    """
     # batch size
     bs = tf.shape(real_data[0])[0]
+    # constant input for generator
+    c = tf.ones(shape=(bs,1))
 
     # train discriminator on real data
     with tf.GradientTape() as tape:
@@ -78,9 +91,7 @@ class GAN(Model):
     # train discriminator on fake data
     with tf.GradientTape() as tape:
       # generate fake data
-      ##XXHEREXX - not normal; need random label!!
-      z = tf.random.normal(shape=(bs, self.latent_dim))
-      c = tf.ones(shape=(bs,1))
+      z = self.rnd_latentLabels(bs)
       fake_data = self.generator((z,c), training=True)
       # train
       labels  = tf.ones((bs,1))
@@ -97,9 +108,9 @@ class GAN(Model):
     with tf.GradientTape() as tape:
       # create misleading labels for generator
       misleading_labels = -tf.ones((bs,1))
-      z = tf.random.normal(shape=(bs, self.latent_dim))
+      z = self.rnd_latentLabels(bs)
       # train
-      fake_preds = self.discriminator(self.generator(z, training=True))
+      fake_preds = self.discriminator(self.generator((z,c), training=True))
       g_loss     = self.loss_fn(misleading_labels, fake_preds)
       grads      = tape.gradient(g_loss, self.generator.trainable_weights)
       self.optG.apply_gradients(zip(grads, self.generator.trainable_weights))
@@ -136,43 +147,41 @@ def _get_disc_dense(fltrs, init, grad_penalty):
 def build_discriminator(data_dim, label_dim, blocks, fltrs, grad_penalty):
   filtersize = 3
   relualpha  = 0.2
-  init       = initializers.RandomNormal(mean=0.0, stddev=0.02)
+  init       = initializers.RandomNormal(mean=0.0, stddev=0.1)
 
-  din = layers.Input(shape=(data_dim,1,))
-  lin = layers.Input(shape=(label_dim,))
+  # data and label inputs
+  din = layers.Input(shape=(data_dim,1))
+  lin = layers.Input(shape=(label_dim))
 
-  ## data subnetwork ##
-  # input convolution layer
-  d1   = _get_disc_conv1d(fltrs, filtersize, init, grad_penalty)(din)
-  dout = layers.LeakyReLU(alpha=relualpha)(d1)
+  # linear projection of labels
+  lpr = _get_disc_dense(data_dim*label_dim, init, grad_penalty)(lin)
+  lpr = layers.Reshape((data_dim, label_dim))(lpr)
 
-  # convolution layer blocks
+  # concatenate linear projection of labels to data
+  dout = layers.Concatenate()([din,lpr])
+
+  # convolution layer blocks - basically a densenet
   for b in range(blocks):
-    if b == blocks-1:
-      con = _get_disc_conv1d(fltrs//2, filtersize, init, grad_penalty)(dout)
-    else:
-      con = _get_disc_conv1d(fltrs, filtersize, init, grad_penalty)(dout)
-    act  = layers.LeakyReLU(alpha=relualpha)(con)
-    dout = layers.LayerNormalization()(act)
+    # prefilter input features to reduce dimensionality
+    pft = _get_disc_conv1d(fltrs, 1, init, grad_penalty)(dout)
+    pft = layers.LeakyReLU(alpha=relualpha)(pft)
+    # convolution after prefilter
+    con = _get_disc_conv1d(fltrs, filtersize, init, grad_penalty)(pft)
+    act = layers.LeakyReLU(alpha=relualpha)(con)
+    if grad_penalty:
+      act = layers.LayerNormalization(center=False, scale=False)(act)
+    # concatenate input with activation post-conv
+    dout = layers.Concatenate()([dout,act])
 
+  # downsample features
+  dout = _get_disc_conv1d(fltrs//2, 1, init, grad_penalty)(dout)
+  dout = layers.LeakyReLU(alpha=relualpha)(dout)
   dout = layers.Flatten()(dout)
 
-  ## label subnetwork ##
-  l1   = _get_disc_dense(fltrs//2, init, grad_penalty)(lin)
-  lout = layers.LeakyReLU(alpha=relualpha)(l1)
-
-  for b in range(blocks):
-    dns  = _get_disc_dense(fltrs//2, init, grad_penalty)(lout)
-    act  = layers.LeakyReLU(alpha=relualpha)(dns)
-    lout = layers.LayerNormalization()(act)
-
-  lout = layers.Flatten()(lout)
-
-  ## decision layers ##
-  cnct = layers.Concatenate()([dout,lout])
-  deci = _get_disc_dense(fltrs//2, init, grad_penalty)(cnct)
+  # decision layers
+  deci = _get_disc_dense(fltrs//2, init, grad_penalty)(dout)
   acti = layers.LeakyReLU(alpha=relualpha)(deci)
-  mout = _get_disc_dense(1, init, grad_penalty)(acti)
+  mout = layers.Dense(1, kernel_initializer=init)(acti)
   return Model(inputs=(din,lin), outputs=mout, name='discriminator')
 
 
@@ -205,7 +214,7 @@ def store_model(epoch, logs, generator, genfname):
   return
 
 ### build Dataset from data file
-def get_real_data(filename, buffersize, batchsize):
+def get_real_data(filename, batchsize):
   indatas = []
   targets = []
   with open(filename, 'r') as handle:
@@ -230,7 +239,7 @@ def get_real_data(filename, buffersize, batchsize):
       indatas.append(datas)
   # package in tensorflow Dataset
   data = Dataset.from_tensor_slices((indatas, targets))
-  data = data.shuffle(buffersize).batch(batchsize)
+  data = data.shuffle(len(indatas)).batch(batchsize)
   return data
 
 ### wasserstein loss function
@@ -261,8 +270,6 @@ if __name__ == '__main__':
                       help='number of labels', metavar='N')
 
   # data pre-processing
-  parser.add_argument('--buffer_size', dest='buffer_size', type=int,
-                      help='data shuffling buffer', metavar='N')
   parser.add_argument('--batch_size', dest='batch_size', type=int,
                       help='training batch size', metavar='N')
 
@@ -288,8 +295,7 @@ if __name__ == '__main__':
                       outdir=None,
                       data_dim=256,
                       label_dim=1,
-                      buffer_size=10000,
-                      batch_size=64,
+                      batch_size=32,
                       gen_blocks=4,
                       n_filters=128,
                       lipschitz='gp',
@@ -304,9 +310,7 @@ if __name__ == '__main__':
     os.environ['TF_CPP_MIN_LOG_LEVEL']='1'
 
   # get 'real' labelled data
-  train_data = get_real_data(args.file,
-                             args.buffer_size,
-                             args.batch_size)
+  train_data = get_real_data(args.file, args.batch_size)
   if args.verbose:
     print(train_data.element_spec)
 
@@ -324,7 +328,6 @@ if __name__ == '__main__':
                                       args.n_filters,
                                       gradpenalty)
   generator     = buildGenerator(data_dim=args.data_dim,
-                                 data_input_filters=args.n_filters//2,
                                  data_blocks=args.gen_blocks,
                                  data_filters=args.n_filters,
                                  data_filtersize=3,
@@ -340,7 +343,7 @@ if __name__ == '__main__':
                                  label_initializer=None)
 
   # build GAN
-  gan = GAN(discriminator, generator, args.data_dim, gradpenalty)
+  gan = biGAN(discriminator, generator, gradpenalty)
 
   # set up optimizers
   # implements 2-timescale update rule from https://arxiv.org/pdf/1706.08500.pdf

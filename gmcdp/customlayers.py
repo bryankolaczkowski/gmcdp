@@ -170,7 +170,7 @@ class AdaInstanceNormalization(Layer):
     self.epsilon = epsilon
     self.center = center
     self.scale = scale
-
+    return
 
   def build(self, input_shape):
     dim = input_shape[0][self.axis]
@@ -180,6 +180,7 @@ class AdaInstanceNormalization(Layer):
                        'but the layer received an input with shape ' +
                        str(input_shape[0]) + '.')
     super(AdaInstanceNormalization, self).build(input_shape)
+    return
 
   def call(self, inputs, training=None):
     input_shape    = K.int_shape(inputs[0])
@@ -192,10 +193,13 @@ class AdaInstanceNormalization(Layer):
       del reduction_axes[self.axis]
 
     del reduction_axes[0]
-    mean   = K.mean(inputs[0], reduction_axes, keepdims=True)
-    stddev = K.std(inputs[0], reduction_axes, keepdims=True) + self.epsilon
+    mean   = 0.0
+    stddev = 1.0
+    if self.center:
+      mean   = K.mean(inputs[0], reduction_axes, keepdims=True)
+    if self.scale:
+      stddev = K.std(inputs[0], reduction_axes, keepdims=True) + self.epsilon
     normed = (inputs[0] - mean) / stddev
-
     return normed * gamma + beta
 
   def get_config(self):

@@ -30,8 +30,9 @@ def _buildGenBlock(filters,
     https://arxiv.org/pdf/2006.05891.pdf
   implements adaptive instance normalization from
     https://arxiv.org/pdf/1703.06868.pdf
-  adapted from stylegan paper
+  adapted from stylegan and stylegan2
     https://arxiv.org/pdf/1812.04948.pdf
+    https://arxiv.org/pdf/1912.04958.pdf
   """
   con = tf.keras.layers.Conv1D(filters,
                                filtersize,
@@ -39,19 +40,19 @@ def _buildGenBlock(filters,
                                use_bias=use_bias,
                                kernel_initializer=init,
                                name=name+'_conv')(input)
-  nor = customlayers.AdaInstanceNormalization(
-                     name=name+'_adain')([con,beta,gamma])
+  nor = customlayers.AdaInstanceNormalization(center=False, scale=True,
+                                        name=name+'_nor')([con,beta,gamma])
   act = tf.keras.layers.LeakyReLU(alpha=relu_alpha, name=name+'_lrelu')(nor)
   sig = tf.keras.layers.MaxPool1D(pool_size=filtersize,
                                   strides=1,
                                   padding='same',
                                   name=name+'_maxpool')(act)
   noi = customlayers.GausNoiseOn(stddev=1.0, name=name+'_noise')(sig)
-  out = tf.keras.layers.Add(name=name+'_add')([act,noi])
+  add = tf.keras.layers.Add(name=name+'_add')([act,noi])
+  out = tf.keras.layers.Concatenate(name=name+'_concat')([input,add])
   return out
 
 def _buildDataSubnet(dim,
-                     input_filters,
                      blocks,
                      filters,
                      filtersize,
@@ -64,14 +65,14 @@ def _buildDataSubnet(dim,
   builds a subnetwork to generate fake data
   """
   namebase = 'gen_data' # base for layer names
-  lname    = namebase + '_linear_in'
+  lname    = namebase + '_linin'
   # linear transformation of constant input to data dimensions
   con = tf.keras.layers.Input(shape=(1), name=namebase+'_const')
-  lin = tf.keras.layers.Dense(dim * input_filters,
+  lin = tf.keras.layers.Dense(dim * filters//2,
                               use_bias=use_bias,
                               kernel_initializer=init,
                               name=lname)(con)
-  out = tf.keras.layers.Reshape((dim,input_filters),
+  out = tf.keras.layers.Reshape((dim,filters//2),
                                 name=lname+'_rshp')(lin)
   # data generator blocks
   for i in range(blocks):
@@ -85,13 +86,19 @@ def _buildDataSubnet(dim,
                          betas[i],
                          gammas[i],
                          out)
+  # bidirectional LSTM over concatenated feature maps
+  bdr = tf.keras.layers.Bidirectional(
+                              tf.keras.layers.LSTM(filters//2,
+                                                   kernel_initializer=init,
+                                                   return_sequences=True),
+                              name='gen_lstm')(out)
   # final generator output becomes data
   out = tf.keras.layers.Conv1D(1,
                                filtersize,
                                padding='same',
                                use_bias=use_bias,
                                kernel_initializer=init,
-                               name='gen_out')(out)
+                               name='gen_out')(bdr)
   return (con,out)
 
 def _buildLabelSubnet(dim,
@@ -137,7 +144,6 @@ def _buildLabelSubnet(dim,
   return (lin,betas,gammas)
 
 def buildGenerator(data_dim=None,
-                   data_input_filters=32,
                    data_blocks=4,
                    data_filters=128,
                    data_filtersize=3,
@@ -162,9 +168,9 @@ def buildGenerator(data_dim=None,
 
   # setup default initializers
   if data_initializer is None:
-    data_initializer = tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.02)
+    data_initializer = tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.1)
   if label_initializer is None:
-    label_initializer = tf.keras.initializers.RandomNormal(mean=0.0,stddev=0.02)
+    label_initializer = tf.keras.initializers.RandomNormal(mean=0.0,stddev=0.1)
 
   # build label subnetwork
   input,betas,gammas = _buildLabelSubnet(label_dim,
@@ -178,7 +184,6 @@ def buildGenerator(data_dim=None,
 
   # build data generator subnetwork
   con,output = _buildDataSubnet(data_dim,
-                                data_input_filters,
                                 data_blocks,
                                 data_filters,
                                 data_filtersize,
@@ -189,5 +194,5 @@ def buildGenerator(data_dim=None,
                                 gammas)
 
   return tf.keras.Model(inputs=(input,con),
-                        outputs=(input,output),
+                        outputs=(output,input),
                         name='generator')
