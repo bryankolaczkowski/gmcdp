@@ -155,7 +155,7 @@ class SpectralNormalization(tf.keras.layers.Wrapper):
 #    https://arxiv.org/pdf/1812.04948.pdf
 # adapted from:
 #    https://github.com/manicman1999/StyleGAN-Keras
-# Input b and g should be 1x1xC
+# Input b and g should be 1xC for 1D data
 class AdaInstanceNormalization(Layer):
   def __init__(self,
                axis=-1,

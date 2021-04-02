@@ -21,7 +21,8 @@ from   tensorflow.keras import layers, Model, Sequential, optimizers, losses, \
 from tensorflow.keras.layers.experimental import preprocessing
 
 from   gmcdp._version     import __version__
-from   gmcdp.customlayers import GausNoiseOn, SpectralNormalization
+from   gmcdp.customlayers import SpectralNormalization
+from   gmcdp.generator    import buildGenerator
 
 ### class definitions ----------------------------------------------------------
 
@@ -50,15 +51,17 @@ class GAN(Model):
       gp_tape.watch(data)
       pred = self.discriminator(data, training=True)
     gp_grds = gp_tape.gradient(pred, [data])[0]
-    norm    = tf.sqrt(tf.reduce_sum(tf.square(gp_grds), axis=[1,2]))
+    s1      = tf.reduce_sum(tf.square(gp_grds[0]), axis=[1,2])
+    s2      = tf.reduce_sum(tf.square(gp_grds[1]), axis=[1])
+    norm    = tf.sqrt(tf.add(s1,s2))
     gp      = tf.reduce_mean((norm-1.0)**2)
     return gp
 
   def train_step(self, real_data):
-    if isinstance(real_data, tuple):
-      real_data = real_data[0]
+    #if isinstance(real_data, tuple):
+    #    real_data = real_data[0]
     # batch size
-    bs = tf.shape(real_data)[0]
+    bs = tf.shape(real_data[0])[0]
 
     # train discriminator on real data
     with tf.GradientTape() as tape:
@@ -75,8 +78,10 @@ class GAN(Model):
     # train discriminator on fake data
     with tf.GradientTape() as tape:
       # generate fake data
+      ##XXHEREXX - not normal; need random label!!
       z = tf.random.normal(shape=(bs, self.latent_dim))
-      fake_data = self.generator(z, training=True)
+      c = tf.ones(shape=(bs,1))
+      fake_data = self.generator((z,c), training=True)
       # train
       labels  = tf.ones((bs,1))
       preds   = self.discriminator(fake_data, training=True)
@@ -130,6 +135,7 @@ def _get_disc_dense(fltrs, init, grad_penalty):
 ## builds discriminator
 def build_discriminator(data_dim, label_dim, blocks, fltrs, grad_penalty):
   filtersize = 3
+  relualpha  = 0.2
   init       = initializers.RandomNormal(mean=0.0, stddev=0.02)
 
   din = layers.Input(shape=(data_dim,1,))
@@ -138,7 +144,7 @@ def build_discriminator(data_dim, label_dim, blocks, fltrs, grad_penalty):
   ## data subnetwork ##
   # input convolution layer
   d1   = _get_disc_conv1d(fltrs, filtersize, init, grad_penalty)(din)
-  dout = layers.LeakyReLU()(d1)
+  dout = layers.LeakyReLU(alpha=relualpha)(d1)
 
   # convolution layer blocks
   for b in range(blocks):
@@ -146,18 +152,18 @@ def build_discriminator(data_dim, label_dim, blocks, fltrs, grad_penalty):
       con = _get_disc_conv1d(fltrs//2, filtersize, init, grad_penalty)(dout)
     else:
       con = _get_disc_conv1d(fltrs, filtersize, init, grad_penalty)(dout)
-    act  = layers.LeakyReLU()(con)
+    act  = layers.LeakyReLU(alpha=relualpha)(con)
     dout = layers.LayerNormalization()(act)
 
   dout = layers.Flatten()(dout)
 
   ## label subnetwork ##
   l1   = _get_disc_dense(fltrs//2, init, grad_penalty)(lin)
-  lout = layers.LeakyReLU()(l1)
+  lout = layers.LeakyReLU(alpha=relualpha)(l1)
 
   for b in range(blocks):
     dns  = _get_disc_dense(fltrs//2, init, grad_penalty)(lout)
-    act  = layers.LeakyReLU()(dns)
+    act  = layers.LeakyReLU(alpha=relualpha)(dns)
     lout = layers.LayerNormalization()(act)
 
   lout = layers.Flatten()(lout)
@@ -165,61 +171,10 @@ def build_discriminator(data_dim, label_dim, blocks, fltrs, grad_penalty):
   ## decision layers ##
   cnct = layers.Concatenate()([dout,lout])
   deci = _get_disc_dense(fltrs//2, init, grad_penalty)(cnct)
-  mout = _get_disc_dense(1, init, grad_penalty)(deci)
+  acti = layers.LeakyReLU(alpha=relualpha)(deci)
+  mout = _get_disc_dense(1, init, grad_penalty)(acti)
   return Model(inputs=(din,lin), outputs=mout, name='discriminator')
 
-
-
-### build a generator block
-# implements 'noise injection' into layers from
-#   https://arxiv.org/pdf/1812.04948.pdf
-#   and https://arxiv.org/pdf/2006.05891.pdf
-def gen_block(inlayer, n_neurons, block_id, filtersize, use_bias, init):
-  conv = layers.Conv1DTranspose(n_neurons, filtersize,
-                                padding='same',
-                                use_bias=use_bias,
-                                kernel_initializer=init,
-                                name='convt_'+str(block_id))(inlayer)
-  bn = layers.BatchNormalization(name='bn_'+str(block_id))(conv)
-  mu = layers.LeakyReLU(name='mu_'+str(block_id))(bn)
-  mp = layers.MaxPool1D(filtersize, 1,
-                        padding='same',
-                        name='pool_'+str(block_id))(mu)
-  gn = GausNoiseOn(stddev=1.0, name='noise_'+str(block_id))(mp)
-  Lout = layers.Add(name='out_'+str(block_id))([mu,gn])
-  return Lout
-
-### build generator model
-#XXHEREXX#
-def build_generator(data_dim, label_dim, blocks, nrons):
-  filtersize = 3
-  use_bias   = False
-  init       = initializers.RandomNormal(mean=0.0, stddev=0.02)
-
-  #Lin  = layers.Input(shape=(latent_dim), name='gen_in')
-  #Ld   = layers.Dense(data_dim*nrons, use_bias=use_bias,
-  #                                    kernel_initializer=init,
-  #                                    name='dense_in')(Lin)
-  #bn   = layers.BatchNormalization(name='bn_in')(Ld)
-  #af   = layers.LeakyReLU(name='relu_in')(bn)
-  #tout = layers.Reshape((data_dim, nrons), name='reshape_in')(af)
-
-  Lin  = layers.Input(shape=(data_dim), name='gen_in')
-  rshp = layers.Reshape((data_dim, 1), name='reshape_in')(Lin)
-  lstm = layers.Bidirectional(layers.LSTM(nrons, kernel_initializer=init,
-                              return_sequences=True), name='lstm')(rshp)
-  tout = layers.BatchNormalization(name='bn_in')(lstm)
-
-  for i in range(blocks):
-    tout = gen_block(tout, nrons, i, filtersize, use_bias, init)
-
-  Lout = layers.Conv1DTranspose(1, filtersize,
-                                padding='same',
-                                use_bias=use_bias,
-                                kernel_initializer=init,
-                                name='gen_out')(tout)
-
-  return Model(inputs=Lin, outputs=Lout, name='generator')
 
 ### write log data to output file
 def writelog(epoch, logs, outf):
@@ -269,7 +224,7 @@ def get_real_data(filename, buffersize, batchsize):
         indata_cols.append(idx)
     # parse data
     for row in reader:
-      trgts = [ int(row[i]) for i in target_cols ]
+      trgts = [ float(row[i]) for i in target_cols ]
       datas = [ [float(row[i])] for i in indata_cols]
       targets.append(trgts)
       indatas.append(datas)
@@ -368,10 +323,21 @@ if __name__ == '__main__':
                                       args.gen_blocks,
                                       args.n_filters,
                                       gradpenalty)
-  generator     = build_generator(args.data_dim,
-                                  args.label_dim,
-                                  args.gen_blocks,
-                                  args.n_filters)
+  generator     = buildGenerator(data_dim=args.data_dim,
+                                 data_input_filters=args.n_filters//2,
+                                 data_blocks=args.gen_blocks,
+                                 data_filters=args.n_filters,
+                                 data_filtersize=3,
+                                 data_bias=False,
+                                 data_relu_alpha=0.2,
+                                 data_initializer=None,
+
+                                 label_dim=args.label_dim,
+                                 label_blocks=args.gen_blocks,
+                                 label_filters=args.n_filters//2,
+                                 label_bias=False,
+                                 label_relu_alpha=0.2,
+                                 label_initializer=None)
 
   # build GAN
   gan = GAN(discriminator, generator, args.data_dim, gradpenalty)
@@ -389,8 +355,6 @@ if __name__ == '__main__':
 
   if args.verbose:
     gan.summary()
-
-  sys.exit(0)
 
   # set up output base name
   outbasename = args.file
