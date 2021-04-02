@@ -9,10 +9,6 @@ import scipy.stats
 import tensorflow        as tf
 import matplotlib.pyplot as plt
 
-import matplotlib
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation, PillowWriter
-
 ntaxa = 256    # number of taxa in 'relative abundance' data
 
 rng = numpy.random.default_rng()
@@ -110,146 +106,9 @@ if __name__ == '__main__':
   plot_data(real_data, fake_data, axs[0])
 
   perturb_up = True
-  #real_data,fake_data = test_gen(perturb_up, n_samples, gen)
-  #plot_data(real_data, fake_data, axs[1])
+  real_data,fake_data = test_gen(perturb_up, n_samples, gen)
+  plot_data(real_data, fake_data, axs[1])
 
   plt.tight_layout()
   plt.show()
 
-
-
-  """
-    ### plot example results
-    matplotlib.rcParams.update({'font.size':8})
-
-    x = numpy.linspace(1, args.data_dim, num=args.data_dim)
-    gens = numpy.arange(0, len(gen_points_list))
-
-    fig,axs = plt.subplots(nrows=3, ncols=n_samples, figsize=(n_samples,3),
-                           sharex=True, sharey=True)
-
-    # set up example data logging
-    axs[0,0].set_ylabel('real data')
-    axs[1,0].set_ylabel('fake data')
-    dyn_data = []
-    for i in range(n_samples):
-      axs[0,i].get_xaxis().set_ticks([])
-      axs[0,i].get_yaxis().set_ticks([])
-      axs[1,i].get_xaxis().set_ticks([])
-      axs[1,i].get_yaxis().set_ticks([])
-      ax = axs[0,i]
-      y  = real_points_list[i]
-      ax.plot(x,y, 'bo', markersize=1)
-      dd, = axs[1,i].plot([],[], 'ro', markersize=1)
-      dyn_data.append(dd)
-
-    # set up loss logging
-    lsax = plt.subplot2grid((3,n_samples), (2,0), colspan=n_samples)
-    lsax.set_xlim([0, len(gen_points_list)-1])
-    min_loss = numpy.amin([x for x in log_lists.values()])
-    max_loss = numpy.amax([x for x in log_lists.values()])
-    lsax.set_ylim([min_loss, max_loss])
-    lsax.set_ylabel('loss')
-    lsax.set_xlabel('generation')
-    lsax.get_xaxis().set_ticks([])
-    lsax.get_yaxis().set_ticks([])
-    for loss in log_lists.keys():
-      dd, = lsax.plot([],[], linewidth=0.5, label=loss)
-      dyn_data.append(dd)
-    lsax.legend(loc='upper left', borderpad=0.2,
-                                  labelspacing=0.2,
-                                  handlelength=0.5,
-                                  handletextpad=0.2)
-
-    plt.tight_layout()
-
-    def update(data_idx):
-      # example data
-      data = gen_points_list[data_idx]
-      for i in range(n_samples):
-        y  = data[i,:,:].ravel()
-        dyn_data[i].set_data(x,y)
-      # losses
-      loss_x = gens[:data_idx+1]  ### plot example results
-  matplotlib.rcParams.update({'font.size':8})
-
-  x = numpy.linspace(1, args.data_dim, num=args.data_dim)
-  gens = numpy.arange(0, len(gen_points_list))
-
-  fig,axs = plt.subplots(nrows=3, ncols=n_samples, figsize=(n_samples,3),
-                         sharex=True, sharey=True)
-
-  # set up example data logging
-  axs[0,0].set_ylabel('real data')
-  axs[1,0].set_ylabel('fake data')
-  dyn_data = []
-  for i in range(n_samples):
-    axs[0,i].get_xaxis().set_ticks([])
-    axs[0,i].get_yaxis().set_ticks([])
-    axs[1,i].get_xaxis().set_ticks([])
-    axs[1,i].get_yaxis().set_ticks([])
-    ax = axs[0,i]
-    y  = real_points_list[i]
-    ax.plot(x,y, 'bo', markersize=1)
-    dd, = axs[1,i].plot([],[], 'ro', markersize=1)
-    dyn_data.append(dd)
-
-  # set up loss logging
-  lsax = plt.subplot2grid((3,n_samples), (2,0), colspan=n_samples)
-  lsax.set_xlim([0, len(gen_points_list)-1])
-  min_loss = numpy.amin([x for x in log_lists.values()])
-  max_loss = numpy.amax([x for x in log_lists.values()])
-  lsax.set_ylim([min_loss, max_loss])
-  lsax.set_ylabel('loss')
-  lsax.set_xlabel('generation')
-  lsax.get_xaxis().set_ticks([])
-  lsax.get_yaxis().set_ticks([])
-  for loss in log_lists.keys():
-    dd, = lsax.plot([],[], linewidth=0.5, label=loss)
-    dyn_data.append(dd)
-  lsax.legend(loc='upper left', borderpad=0.2,
-                                labelspacing=0.2,
-                                handlelength=0.5,
-                                handletextpad=0.2)
-
-  plt.tight_layout()
-
-  def update(data_idx):
-    # example data
-    data = gen_points_list[data_idx]
-    for i in range(n_samples):
-      y  = data[i,:,:].ravel()
-      dyn_data[i].set_data(x,y)
-    # losses
-    loss_x = gens[:data_idx+1]
-    i = n_samples
-    for loss in log_lists.values():
-      loss_y = loss[:data_idx+1]
-      dyn_data[i].set_data(loss_x, loss_y)
-      i += 1
-    return dyn_data,
-
-  anim = FuncAnimation(fig, update,
-                       frames=numpy.arange(0,len(gen_points_list)),
-                       interval=200)
-  #plt.show()
-
-  writer = PillowWriter(fps=4)
-  gifname = args.file + '.out.gif'
-  anim.save(gifname, writer=writer)
-      i = n_samples
-      for loss in log_lists.values():
-        loss_y = loss[:data_idx+1]
-        dyn_data[i].set_data(loss_x, loss_y)
-        i += 1
-      return dyn_data,
-
-    anim = FuncAnimation(fig, update,
-                         frames=numpy.arange(0,len(gen_points_list)),
-                         interval=200)
-    #plt.show()
-
-    writer = PillowWriter(fps=4)
-    gifname = args.file + '.out.gif'
-    anim.save(gifname, writer=writer)
-    """
