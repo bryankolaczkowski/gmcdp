@@ -4,16 +4,71 @@ from . import customlayers
 
 def _buildDenseBlock(filters, use_bias, init, relu_alpha, name, input):
   """
-  builds a dense block consisting of a dense layer connected to input,
-  with relu activation
+  input -> dense -> leakyReLU
   returns the output after activation
   """
   dl = tf.keras.layers.Dense(filters,
                              use_bias=use_bias,
                              kernel_initializer=init,
-                             name=name+'_dense')(input)
-  ra = tf.keras.layers.LeakyReLU(alpha=relu_alpha, name=name+'_lrelu')(dl)
+                             name=name+'_dns')(input)
+  ra = tf.keras.layers.LeakyReLU(alpha=relu_alpha, name=name+'_lrlu')(dl)
   return ra
+
+def _buildLatentSpaceSngl(filters,
+                          use_bias,
+                          init,
+                          relu_alpha,
+                          name,
+                          latent_space):
+  """
+  builds linear controls from latent_space
+  returns a (?,1,filters) control vector
+  """
+  out = tf.keras.layers.Dense(filters,
+                              use_bias=use_bias,
+                              kernel_initializer=init,
+                              name=name)(latent_space)
+  out = tf.keras.layers.Reshape(target_shape=(1,filters),
+                                name=name+'_rshp')(out)
+  out = tf.keras.layers.LeakyReLU(alpha=relu_alpha, name=name+'_act')(out)
+  return out
+
+def _buildLatentSpaceBlock(filters,
+                           use_bias,
+                           init,
+                           relu_alpha,
+                           name,
+                           latent_space):
+  """
+  builds linear transform from latent_space to adaptive controls
+  returns data_scale, data_bias, noise_scale tuple
+  """
+  # data scaling for AdaIN
+  nbase = name + '_ds'
+  ds = _buildLatentSpaceSngl(filters,
+                             use_bias,
+                             init,
+                             relu_alpha,
+                             nbase,
+                             latent_space)
+  # data bias for AdaIN
+  nbase = name + '_bs'
+  bs = _buildLatentSpaceSngl(filters,
+                             use_bias,
+                             init,
+                             relu_alpha,
+                             nbase,
+                             latent_space)
+  # noise scaling for AdaptiveGaussianNoise
+  nbase = name + '_ns'
+  ns = _buildLatentSpaceSngl(filters,
+                             use_bias,
+                             init,
+                             relu_alpha,
+                             nbase,
+                             latent_space)
+  # return tuple
+  return ds, bs, ns
 
 def _buildGenBlock(filters,
                    filtersize,
@@ -21,8 +76,7 @@ def _buildGenBlock(filters,
                    init,
                    relu_alpha,
                    name,
-                   beta,
-                   gamma,
+                   latent_space,
                    input):
   """
   builds a generator block
@@ -34,22 +88,42 @@ def _buildGenBlock(filters,
     https://arxiv.org/pdf/1812.04948.pdf
     https://arxiv.org/pdf/1912.04958.pdf
   """
-  con = tf.keras.layers.Conv1D(filters,
-                               filtersize,
-                               padding='same',
-                               use_bias=use_bias,
-                               kernel_initializer=init,
-                               name=name+'_conv')(input)
-  nor = customlayers.AdaInstanceNormalization(center=False, scale=True,
-                                        name=name+'_nor')([con,beta,gamma])
-  act = tf.keras.layers.LeakyReLU(alpha=relu_alpha, name=name+'_lrelu')(nor)
-  sig = tf.keras.layers.MaxPool1D(pool_size=filtersize,
-                                  strides=1,
-                                  padding='same',
-                                  name=name+'_maxpool')(act)
-  noi = customlayers.GausNoiseOn(stddev=1.0, name=name+'_noise')(sig)
-  add = tf.keras.layers.Add(name=name+'_add')([act,noi])
-  out = tf.keras.layers.Concatenate(name=name+'_concat')([input,add])
+  # latent space block
+  data_scale, bias, noise_scale = _buildLatentSpaceBlock(filters,
+                                                         use_bias,
+                                                         init,
+                                                         relu_alpha,
+                                                         name+'_ada',
+                                                         latent_space)
+
+  # transform input into filters 'feature maps'
+  # up/down samples feature maps, providing choke points for dense net
+  con1 = tf.keras.layers.Conv1D(filters,
+                                1,
+                                padding='same',
+                                use_bias=use_bias,
+                                kernel_initializer=init,
+                                name=name+'_c1')(input)
+  # activation
+  c1act = tf.keras.layers.LeakyReLU(alpha=relu_alpha, name=name+'_c1act')(con1)
+  # convolution-activation block
+  con2 = tf.keras.layers.Conv1D(filters,
+                                filtersize,
+                                padding='same',
+                                use_bias=use_bias,
+                                kernel_initializer=init,
+                                name=name+'_c2')(c1act)
+  c2act = tf.keras.layers.LeakyReLU(alpha=relu_alpha, name=name+'_c2act')(con2)
+  # adaptive noise injection
+  noi = customlayers.AdaptiveGaussianNoise(name=name+'_noi')([c2act,
+                                                              noise_scale])
+  # adaptive instance normalization
+  nor = customlayers.AdaInstanceNormalization(center=True, scale=True,
+                                        name=name+'_nor')([noi,
+                                                           bias,
+                                                           data_scale])
+  # concatenate input to block output (aka 'dense net')
+  out = tf.keras.layers.Concatenate(name=name+'_concat')([input,nor])
   return out
 
 def _buildDataSubnet(dim,
@@ -59,32 +133,27 @@ def _buildDataSubnet(dim,
                      use_bias,
                      relu_alpha,
                      init,
-                     betas,
-                     gammas):
+                     latent_space):
   """
   builds a subnetwork to generate fake data
   """
-  namebase = 'gen_data' # base for layer names
+  namebase = 'gen_dta' # base for layer names
   lname    = namebase + '_linin'
   # linear transformation of constant input to data dimensions
-  con = tf.keras.layers.Input(shape=(1), name=namebase+'_const')
-  lin = tf.keras.layers.Dense(dim * filters//2,
-                              use_bias=use_bias,
-                              kernel_initializer=init,
-                              name=lname)(con)
-  out = tf.keras.layers.Reshape((dim,filters//2),
-                                name=lname+'_rshp')(lin)
+  out = customlayers.LinearInput(dim,
+                                 use_bias=use_bias,
+                                 kernel_initializer=init,
+                                 name=lname)(latent_space)
   # data generator blocks
   for i in range(blocks):
-    nbase = namebase + '_block{}'.format(i)
+    nbase = namebase + '_blk{}'.format(i)
     out = _buildGenBlock(filters,
                          filtersize,
                          use_bias,
                          init,
                          relu_alpha,
                          nbase,
-                         betas[i],
-                         gammas[i],
+                         latent_space,
                          out)
   # bidirectional LSTM over concatenated feature maps
   bdr = tf.keras.layers.Bidirectional(
@@ -99,7 +168,7 @@ def _buildDataSubnet(dim,
                                use_bias=use_bias,
                                kernel_initializer=init,
                                name='gen_out')(bdr)
-  return (con,out)
+  return out
 
 def _buildLabelSubnet(dim,
                       blocks,
@@ -107,41 +176,19 @@ def _buildLabelSubnet(dim,
                       outputs,
                       use_bias,
                       relu_alpha,
-                      init,
-                      output_filters):
+                      init):
   """
-  builds a subnetwork to transform input labels into beta,gamma values for
-  controlling adaptive instance normalization
+  subnetwork learns label->latent_space mapping
   """
-  betas    = []          # will hold beta outputs for instance normalization
-  gammas   = []          # will hold gamma outputs for instance normalization
-  namebase = 'gen_label' # base for layer names
+  namebase = 'gen_labl' # base for layer names
   # input layers
-  lin = tf.keras.layers.Input(shape=dim, name=namebase+'_input')
-  out = tf.keras.layers.Flatten(name=namebase+'_input_flatten')(lin)
-  # dense blocks with leaky_relu activation
+  lin = tf.keras.layers.Input(shape=dim, name=namebase+'_in')
+  out = tf.keras.layers.Flatten(name=namebase+'_in_fltn')(lin)
+  # dense blocks
   for i in range(blocks):
-    nbase = namebase + '_block{}'.format(i)
+    nbase = namebase + '_blk{}'.format(i)
     out = _buildDenseBlock(filters, use_bias, init, relu_alpha, nbase, out)
-  # output layers
-  for i in range(outputs):
-    bnm  = namebase + '_outbeta{}'.format(i)
-    beta = tf.keras.layers.Dense(output_filters,
-                                 use_bias=use_bias,
-                                 kernel_initializer=init,
-                                 name=bnm)(out)
-    beta = tf.keras.layers.Reshape((1,output_filters),
-                                   name=bnm+'_rshp')(beta)
-    gnm  = namebase + '_outgamma{}'.format(i)
-    gama = tf.keras.layers.Dense(output_filters,
-                                 use_bias=use_bias,
-                                 kernel_initializer=init,
-                                 name=gnm)(out)
-    gama = tf.keras.layers.Reshape((1,output_filters),
-                                   name=gnm+'_rshp')(gama)
-    betas.append(beta)
-    gammas.append(gama)
-  return (lin,betas,gammas)
+  return (lin,out)
 
 def buildGenerator(data_dim=None,
                    data_blocks=4,
@@ -173,26 +220,24 @@ def buildGenerator(data_dim=None,
     label_initializer = tf.keras.initializers.RandomNormal(mean=0.0,stddev=0.1)
 
   # build label subnetwork
-  input,betas,gammas = _buildLabelSubnet(label_dim,
-                                         label_blocks,
-                                         label_filters,
-                                         data_blocks,
-                                         label_bias,
-                                         label_relu_alpha,
-                                         label_initializer,
-                                         data_filters)
+  input,latent = _buildLabelSubnet(label_dim,
+                                   label_blocks,
+                                   label_filters,
+                                   data_blocks,
+                                   label_bias,
+                                   label_relu_alpha,
+                                   label_initializer)
 
   # build data generator subnetwork
-  con,output = _buildDataSubnet(data_dim,
-                                data_blocks,
-                                data_filters,
-                                data_filtersize,
-                                data_bias,
-                                data_relu_alpha,
-                                data_initializer,
-                                betas,
-                                gammas)
+  output = _buildDataSubnet(data_dim,
+                            data_blocks,
+                            data_filters,
+                            data_filtersize,
+                            data_bias,
+                            data_relu_alpha,
+                            data_initializer,
+                            latent)
 
-  return tf.keras.Model(inputs=(input,con),
+  return tf.keras.Model(inputs=input,
                         outputs=(output,input),
                         name='generator')

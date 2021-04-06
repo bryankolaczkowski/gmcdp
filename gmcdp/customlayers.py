@@ -1,22 +1,65 @@
 import tensorflow as tf
 from tensorflow.python.keras import backend as K
-from tensorflow.python.ops   import array_ops
-from tensorflow.keras.layers import Layer, GaussianNoise
+##from tensorflow.python.ops   import array_ops
 
-#===============================================================================
-# implements Gaussian noise generation that is always on;
-# during training and generation
-class GausNoiseOn(GaussianNoise):
 
-  def __init__(self, stddev, **kwargs):
-    super(GausNoiseOn, self).__init__(stddev, **kwargs)
+class AdaptiveGaussianNoise(tf.keras.layers.Layer):
+  """
+  adds scaled gaussian noise to a tensor
+  """
+  def __init__(self, **kwargs):
+    super(AdaptiveGaussianNoise, self).__init__(**kwargs)
     return
 
-  def call(self, inputs, training=None):
-    return inputs * K.random_normal(shape=array_ops.shape(inputs),
-                                    mean=0.,
-                                    stddev=self.stddev,
-                                    dtype=inputs.dtype)
+  def build(self, input_shape):
+    # no weights in this layer
+    return
+
+  def call(self, inputs):
+    data = inputs[0]
+    nmlt = inputs[1]
+    noise = tf.random.normal(shape=tf.shape(data), mean=0.0, stddev=1.0)
+    return data + noise * nmlt
+
+  def get_config(self):
+    return super(AdaptiveGaussianNoise, self).get_config()
+
+
+class LinearInput(tf.keras.layers.Layer):
+  """
+  linear input layer
+  """
+  def __init__(self,
+               data_dim,
+               use_bias,
+               kernel_initializer=None,
+               **kwargs):
+    super(LinearInput, self).__init__(**kwargs)
+    self.linear  = tf.keras.layers.Dense(units=data_dim,
+                                         use_bias=use_bias,
+                                         kernel_initializer=kernel_initializer,
+                                         name='linear')
+    self.reshape = tf.keras.layers.Reshape(target_shape=(data_dim,1),
+                                           name='reshp')
+    return
+
+  def build(self, input_shape):
+    return
+
+  def call(self, inputs):
+    batch_size = tf.shape(inputs)[0]
+    x = tf.ones((batch_size,1), name='const')
+    x = self.linear(x)  # linear transform constant 1.0 to data length
+    x = self.reshape(x) # reshape to get channel for 1D convolutions
+    return x
+
+  def get_config(self):
+    config = super(LinearInput, self).get_config()
+    config.update({
+      'linear' : self.linear,
+      'reshape': self.reshape,
+    })
+    return config
 
 
 #===============================================================================
@@ -71,7 +114,7 @@ class SpectralNormalization(tf.keras.layers.Wrapper):
     attribute.
   """
 
-  def __init__(self, layer: tf.keras.layers, power_iterations=2, **kwargs):
+  def __init__(self, layer: tf.keras.layers, power_iterations=1, **kwargs):
     super().__init__(layer, **kwargs)
     if power_iterations <= 0:
       raise ValueError(
@@ -156,7 +199,7 @@ class SpectralNormalization(tf.keras.layers.Wrapper):
 # adapted from:
 #    https://github.com/manicman1999/StyleGAN-Keras
 # Input b and g should be 1xC for 1D data
-class AdaInstanceNormalization(Layer):
+class AdaInstanceNormalization(tf.keras.layers.Layer):
   def __init__(self,
                axis=-1,
                momentum=0.99,
@@ -203,15 +246,15 @@ class AdaInstanceNormalization(Layer):
     return normed * gamma + beta
 
   def get_config(self):
-    config = {
+    config = super(AdaInstanceNormalization, self).get_config()
+    config.update({
       'axis': self.axis,
       'momentum': self.momentum,
       'epsilon': self.epsilon,
       'center': self.center,
       'scale': self.scale
-    }
-    base_config = super(AdaInstanceNormalization, self).get_config()
-    return dict(list(base_config.items()) + list(config.items()))
+    })
+    return config
 
   def compute_output_shape(self, input_shape):
     return input_shape[0]

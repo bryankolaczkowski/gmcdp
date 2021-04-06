@@ -73,8 +73,6 @@ class biGAN(Model):
     """
     # batch size
     bs = tf.shape(real_data[0])[0]
-    # constant input for generator
-    c = tf.ones(shape=(bs,1))
 
     # train discriminator on real data
     with tf.GradientTape() as tape:
@@ -92,7 +90,7 @@ class biGAN(Model):
     with tf.GradientTape() as tape:
       # generate fake data
       z = self.rnd_latentLabels(bs)
-      fake_data = self.generator((z,c), training=True)
+      fake_data = self.generator(z, training=True)
       # train
       labels  = tf.ones((bs,1))
       preds   = self.discriminator(fake_data, training=True)
@@ -110,7 +108,7 @@ class biGAN(Model):
       misleading_labels = -tf.ones((bs,1))
       z = self.rnd_latentLabels(bs)
       # train
-      fake_preds = self.discriminator(self.generator((z,c), training=True))
+      fake_preds = self.discriminator(self.generator(z, training=True))
       g_loss     = self.loss_fn(misleading_labels, fake_preds)
       grads      = tape.gradient(g_loss, self.generator.trainable_weights)
       self.optG.apply_gradients(zip(grads, self.generator.trainable_weights))
