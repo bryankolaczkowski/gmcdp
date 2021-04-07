@@ -187,7 +187,7 @@ def build_discriminator(data_dim, label_dim, blocks, fltrs, grad_penalty):
 def writelog(epoch, logs, outf):
   outf.write(str(epoch))
   for k in logs.keys():
-    outf.write(',{:.4f}'.format(logs[k]))
+    outf.write(',{:.4e}'.format(logs[k]))
   outf.write('\n')
   return
 
@@ -296,7 +296,7 @@ if __name__ == '__main__':
                       batch_size=32,
                       gen_blocks=4,
                       n_filters=128,
-                      lipschitz='gp',
+                      lipschitz='sn',
                       optimizer='adam',
                       learn_rate=1.0e-4,
                       epochs=1000)
