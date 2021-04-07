@@ -30,10 +30,11 @@ from   gmcdp.generator    import buildGenerator
 # with binary label
 class biGAN(Model):
 
-  def __init__(self, disc, gen, gradpenalty):
+  def __init__(self, disc, gen, dupdates, gradpenalty):
     super(biGAN, self).__init__()
     self.discriminator = disc
     self.generator     = gen
+    self.dupdates      = dupdates
     self.gradpenalty   = gradpenalty
     return
 
@@ -74,68 +75,72 @@ class biGAN(Model):
     # batch size
     bs = tf.shape(real_data[0])[0]
 
-    # train discriminator on real data
-    with tf.GradientTape() as tape:
-      labels  = -tf.ones((bs,1))
-      preds   = self.discriminator(real_data, training=True)
-      d_lossR = self.loss_fn(labels, preds)
-      if self.gradpenalty:
-        gp      = self.grad_penalty(real_data)
-        d_lossR += gp * self.gp_weight
-      grads   = tape.gradient(d_lossR, self.discriminator.trainable_weights)
-      self.optD.apply_gradients(zip(grads,
-                                    self.discriminator.trainable_weights))
+    pones =  tf.ones((bs,1))
+    nones = -tf.ones((bs,1))
 
-    # train discriminator on fake data
-    with tf.GradientTape() as tape:
-      # generate fake data
-      z = self.rnd_latentLabels(bs)
-      fake_data = self.generator(z, training=False)
-      # train
-      labels  = tf.ones((bs,1))
-      preds   = self.discriminator(fake_data, training=True)
-      d_lossG = self.loss_fn(labels, preds)
-      if self.gradpenalty:
-        gp      = self.grad_penalty(fake_data)
-        d_lossG += gp * self.gp_weight
-      grads   = tape.gradient(d_lossG, self.discriminator.trainable_weights)
-      self.optD.apply_gradients(zip(grads,
-                                    self.discriminator.trainable_weights))
+    # train discriminator a few times
+    for i in range(self.dupdates):
+      # train discriminator on real data
+      with tf.GradientTape() as tape:
+        preds   = self.discriminator(real_data, training=True)
+        d_lossR = self.loss_fn(nones, preds)
+        if self.gradpenalty:
+          gp      = self.grad_penalty(real_data)
+          d_lossR += gp * self.gp_weight
+        grads   = tape.gradient(d_lossR, self.discriminator.trainable_weights)
+        self.optD.apply_gradients(zip(grads,
+                                      self.discriminator.trainable_weights))
+
+      # train discriminator on fake data
+      with tf.GradientTape() as tape:
+        # generate fake data
+        z = self.rnd_latentLabels(bs)
+        fake_data = self.generator(z, training=False)
+        # train
+        preds   = self.discriminator(fake_data, training=True)
+        d_lossG = self.loss_fn(pones, preds)
+        if self.gradpenalty:
+          gp      = self.grad_penalty(fake_data)
+          d_lossG += gp * self.gp_weight
+        grads   = tape.gradient(d_lossG, self.discriminator.trainable_weights)
+        self.optD.apply_gradients(zip(grads,
+                                      self.discriminator.trainable_weights))
 
     ## unrolling discriminator ##
     #  https://arxiv.org/pdf/1611.02163.pdf
     # save state of discriminator and optimizer to reset afterwards
-    d_wts  = self.discriminator.get_weights()
-    o_wts  = self.optD.get_weights()
-    labels = tf.ones((bs,1))
-    unrols = 8
-    for i in range(unrols):
-      with tf.GradientTape() as tape:
-        z = self.rnd_latentLabels(bs)
-        fake_data = self.generator(z, training=False)
-        preds     = self.discriminator(fake_data, training=True)
-        d_uloss   = self.loss_fn(labels, preds)
-        if self.gradpenalty:
-          gp      = self.grad_penalty(fake_data)
-          d_uloss += gp * self.gp_weight
-        grads = tape.gradient(d_uloss, self.discriminator.trainable_weights)
-        self.optD.apply_gradients(zip(grads,
-                                      self.discriminator.trainable_weights))
+    #d_wts  = self.discriminator.weights
+    #o_wts  = self.optD.weights
+    #labels = tf.ones((bs,1))
+    #unrols = 8
+    #for i in range(unrols):
+    #  with tf.GradientTape() as tape:
+    #    z = self.rnd_latentLabels(bs)
+    #    fake_data = self.generator(z, training=False)
+    #    preds     = self.discriminator(fake_data, training=True)
+    #    d_uloss   = self.loss_fn(labels, preds)
+    #    if self.gradpenalty:
+    #      gp      = self.grad_penalty(fake_data)
+    #      d_uloss += gp * self.gp_weight
+    #    grads = tape.gradient(d_uloss, self.discriminator.trainable_weights)
+    #    self.optD.apply_gradients(zip(grads,
+    #                                  self.discriminator.trainable_weights))
 
     # train generator once
     with tf.GradientTape() as tape:
       # create misleading labels for generator
-      misleading_labels = -tf.ones((bs,1))
       z = self.rnd_latentLabels(bs)
       # train
       fake_preds = self.discriminator(self.generator(z, training=True))
-      g_loss     = self.loss_fn(misleading_labels, fake_preds)
+      g_loss     = self.loss_fn(nones, fake_preds)
       grads      = tape.gradient(g_loss, self.generator.trainable_weights)
       self.optG.apply_gradients(zip(grads, self.generator.trainable_weights))
 
     # reset discriminator and optimizer weights to before unrolling #
-    self.discriminator.set_weights(d_wts)
-    self.optD.set_weights(o_wts)
+    #for i in range(len(self.discriminator.weights)):
+    #  self.discriminator.weights[i].assign(d_wts[i])
+    #for i in range(len(self.optD.weights)):
+    #  self.optD.weights[i].assign(o_wts[i])
 
     return {'d_loss_real':d_lossR, 'd_loss_fake':d_lossG, 'g_loss':g_loss}
 
@@ -365,12 +370,13 @@ if __name__ == '__main__':
                                  label_initializer=None)
 
   # build GAN
-  gan = biGAN(discriminator, generator, gradpenalty)
+  dupdates = 4 # discriminator updates / generator updates
+  gan = biGAN(discriminator, generator, dupdates, gradpenalty)
 
   # set up optimizers
   # implements 2-timescale update rule from https://arxiv.org/pdf/1706.08500.pdf
   genr_lr = args.learn_rate
-  disc_lr = 2.0 * genr_lr
+  disc_lr = 8.0 * genr_lr
   genr_opt = optimizers.RMSprop(learning_rate=genr_lr)
   disc_opt = optimizers.RMSprop(learning_rate=disc_lr)
   if args.optimizer == 'adam':
