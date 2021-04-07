@@ -4,7 +4,7 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"]="-1"
 
 import argparse
-import distutils
+import distutils.util
 
 import numpy
 import scipy.stats
@@ -138,7 +138,7 @@ def test_generator(ntaxa, nsamples, generator_file):
 
   # set labels for data
   lbls_ones = numpy.ones(shape=nsamples)
-  lbls_zros = numpy.zeroes(shape=nsamples)
+  lbls_zros = numpy.zeros(shape=nsamples)
 
   # generate real data
   realdata_ones = make_microbes(lbls_ones, ntaxa)
