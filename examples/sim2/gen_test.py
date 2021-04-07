@@ -1,15 +1,26 @@
 #!/usr/bin/env python3
 
+import os
+os.environ["CUDA_VISIBLE_DEVICES"]="-1"
+
+import argparse
+import distutils
+
 import numpy
 import scipy.stats
 import matplotlib.pyplot as plt
-
-ntaxa = 256    # number of taxa in 'relative abundance' data
-nsamp = 2048   # number of samples
+import tensorflow as tf
 
 rng = numpy.random.default_rng()
 
-def make_microbes(targets):
+def make_microbes(targets, ntaxa):
+  """
+  create random microbial community data
+  targets is list of labels
+  """
+  # target length is number of samples
+  nsamp = targets.shape[0]
+
   # generate raw log-normal distributed data
   abundance_means = rng.lognormal(10, .01, ntaxa)
   abundance_stdvs = abundance_means / 500
@@ -57,15 +68,19 @@ def make_microbes(targets):
   return retr_data
 
 
-def make_data(outfname):
+def make_data(outfname, ntaxa, nsamples):
+  """
+  create a random data set
+  plot a sample from the data set before writing data to file
+  """
   # generate random target labels
-  targets  = rng.choice([0,1], size=nsamp)
-  microbes = make_microbes(targets)
+  targets  = rng.choice([0,1], size=nsamples)
+  microbes = make_microbes(targets, ntaxa)
 
   # plot a random example datasets
   x = numpy.linspace(1,ntaxa,num=ntaxa)
   for i in range(10):
-    rnd_idx = numpy.random.choice(nsamp)
+    rnd_idx = numpy.random.choice(nsamples)
     type = 'bo'
     if targets[rnd_idx] == 1:
       type = 'ro'
@@ -79,7 +94,7 @@ def make_data(outfname):
     for t in range(ntaxa):
       outf.write(',t{}'.format(t))
     outf.write('\n')
-    for idx in range(nsamp):
+    for idx in range(nsamples):
       trgt = targets[idx]
       taxa = microbes[idx]
       outf.write('{},{},'.format(idx, trgt))
@@ -88,5 +103,91 @@ def make_data(outfname):
   return
 
 
+def plot_data(real_data, fake_data, axs):
+  ## compare real to fake data
+  axis = 0
+  real_means = numpy.mean(real_data, axis=axis)
+  real_stdvs = numpy.std( real_data, axis=axis, ddof=1)
+  fake_means = numpy.mean(fake_data, axis=axis)
+  fake_stdvs = numpy.std( fake_data, axis=axis, ddof=1)
+
+  ## plot
+  min = numpy.minimum(numpy.amin(real_means), numpy.amin(fake_means)) * 1.1
+  max = numpy.maximum(numpy.amax(real_means), numpy.amax(fake_means)) * 1.1
+  axs[0].set_xlim(min, max)
+  axs[0].set_ylim(min, max)
+  axs[0].plot([min,max],[min,max], linewidth=0.5, color='gray')
+  axs[0].scatter(real_means, fake_means, s=2, alpha=0.8)
+
+  min = 0.0
+  max = numpy.maximum(numpy.amax(real_stdvs), numpy.amax(fake_stdvs)) * 1.1
+  axs[1].set_xlim(min, max)
+  axs[1].set_ylim(min, max)
+  axs[1].plot([min,max],[min,max], linewidth=0.5, color='gray')
+  axs[1].scatter(real_stdvs, fake_stdvs, s=2, alpha=0.8, color='red')
+  axs[0].set_aspect(1)
+  axs[1].set_aspect(1)
+
+  return
+
+
+def test_generator(ntaxa, nsamples, generator_file):
+  # load generator
+  generator = tf.keras.models.load_model(generator_file)
+  generator.summary()
+
+  # set labels for data
+  lbls_ones = numpy.ones(shape=nsamples)
+  lbls_zros = numpy.zeroes(shape=nsamples)
+
+  # generate real data
+  realdata_ones = make_microbes(lbls_ones, ntaxa)
+  realdata_zros = make_microbes(lbls_zros, ntaxa)
+
+  # generate fake data
+  fakedata_ones = generator(lbls_ones, training=False)\
+                           .numpy().reshape((nsamples,ntaxa))
+  fakedata_zros = generator(lbls_zros, training=False)\
+                           .numpy().reshape((nsamples,ntaxa))
+
+  # plot data
+  fig,axs = plt.subplots(nrows=2, ncols=2, sharex=False, sharey=False)
+  plot_data(realdata_zros, fakedata_zros, axs[0])
+  plot_data(realdata_ones, fakedata_ones, axs[1])
+
+  plt.tight_layout()
+  plt.show()
+  return
+
+
 if __name__ == '__main__':
-  make_data('data.csv')
+  parser = argparse.ArgumentParser(
+                description='generate data and test GAN',
+                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+  parser.add_argument('--ntaxa', dest='ntaxa', type=int,
+                      help='number of taxa per microbiome', metavar='N')
+  parser.add_argument('--nsamples', dest='nsamples', type=int,
+                      help='number of microbiome samples', metavar='N')
+  parser.add_argument('--testgen', dest='testgen',
+                      type=distutils.util.strtobool,
+                      help='forego data generation, test GAN',
+                      metavar='y|n')
+  parser.add_argument('--generator', dest='generator',
+                      help='test model from this file', metavar='MDL')
+
+  parser.set_defaults(ntaxa=256,
+                      nsamples=2048,
+                      testgen=False,
+                      generator=None)
+
+  args = parser.parse_args()
+
+  if args.testgen and args.generator==None:
+    sys.stderr.write('ERRR: must specify generator to test\n')
+    sys.exit(1)
+
+  if not args.testgen:
+    make_data('data.csv', args.ntaxa, args.nsamples)
+
+  else:
+    test_generator(args.ntaxa, args.nsamples, args.generator)
