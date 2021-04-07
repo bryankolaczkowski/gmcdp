@@ -250,7 +250,7 @@ def wasserstein_loss(tlabs, plabs):
 ### main -----------------------------------------------------------------------
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(
-                description='calculates profiles from a pssm txt file',
+                description='conditional generative adversarial network',
                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   parser.add_argument('--version', action='version', version=__version__)
   parser.add_argument('--verbose', type=distutils.util.strtobool,
