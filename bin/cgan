@@ -331,7 +331,7 @@ if __name__ == '__main__':
                       epochs=1000)
 
   ## baked constants (for now) ##
-  disc_updates_per_gen = 4    # number of discriminator/generator updates
+  disc_updates_per_gen = 1    # number of discriminator/generator updates
   disc_learn_rate_mult = 5.0  # discriminator learn-rate = N * gen learn rate
 
   args = parser.parse_args()
