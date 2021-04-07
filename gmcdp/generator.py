@@ -138,12 +138,13 @@ def _buildDataSubnet(dim,
   builds a subnetwork to generate fake data
   """
   namebase = 'gen_dta' # base for layer names
-  lname    = namebase + '_linin'
+  lname    = namebase + '_lin'
   # linear transformation of constant input to data dimensions
   out = customlayers.LinearInput(dim,
                                  use_bias=use_bias,
                                  kernel_initializer=init,
                                  name=lname)(latent_space)
+  out = customlayers.StandardGaussianNoise(name=lname+'_noi')(out)
   # data generator blocks
   for i in range(blocks):
     nbase = namebase + '_blk{}'.format(i)

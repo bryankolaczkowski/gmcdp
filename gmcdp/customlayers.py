@@ -1,7 +1,25 @@
 import tensorflow as tf
 from tensorflow.python.keras import backend as K
-##from tensorflow.python.ops   import array_ops
 
+class StandardGaussianNoise(tf.keras.layers.Layer):
+  """
+  adds standard gaussian noise to a tensor
+  """
+  def __init__(self, **kwargs):
+    super(StandardGaussianNoise, self).__init__(**kwargs)
+    return
+
+  def build(self, input_shape):
+    # no weights in this layer
+    return
+
+  def call(self, inputs):
+    noise = tf.random.normal(shape=tf.shape(inputs), mean=0.0, stddev=1.0)
+    return inputs + noise
+
+  def get_config(self):
+    return super(StandardGaussianNoise, self).get_config()
+    
 
 class AdaptiveGaussianNoise(tf.keras.layers.Layer):
   """
