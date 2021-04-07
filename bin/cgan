@@ -90,7 +90,7 @@ class biGAN(Model):
     with tf.GradientTape() as tape:
       # generate fake data
       z = self.rnd_latentLabels(bs)
-      fake_data = self.generator(z, training=True)
+      fake_data = self.generator(z, training=False)
       # train
       labels  = tf.ones((bs,1))
       preds   = self.discriminator(fake_data, training=True)
@@ -102,6 +102,26 @@ class biGAN(Model):
       self.optD.apply_gradients(zip(grads,
                                     self.discriminator.trainable_weights))
 
+    ## unrolling discriminator ##
+    #  https://arxiv.org/pdf/1611.02163.pdf
+    # save state of discriminator and optimizer to reset afterwards
+    d_wts  = self.discriminator.get_weights()
+    o_wts  = self.optD.get_weights()
+    labels = tf.ones((bs,1))
+    unrols = 8
+    for i in range(unrols):
+      with tf.GradientTape() as tape:
+        z = self.rnd_latentLabels(bs)
+        fake_data = self.generator(z, training=False)
+        preds     = self.discriminator(fake_data, training=True)
+        d_uloss   = self.loss_fn(labels, preds)
+        if self.gradpenalty:
+          gp      = self.grad_penalty(fake_data)
+          d_uloss += gp * self.gp_weight
+        grads = tape.gradient(d_uloss, self.discriminator.trainable_weights)
+        self.optD.apply_gradients(zip(grads,
+                                      self.discriminator.trainable_weights))
+
     # train generator once
     with tf.GradientTape() as tape:
       # create misleading labels for generator
@@ -112,6 +132,10 @@ class biGAN(Model):
       g_loss     = self.loss_fn(misleading_labels, fake_preds)
       grads      = tape.gradient(g_loss, self.generator.trainable_weights)
       self.optG.apply_gradients(zip(grads, self.generator.trainable_weights))
+
+    # reset discriminator and optimizer weights to before unrolling #
+    self.discriminator.set_weights(d_wts)
+    self.optD.set_weights(o_wts)
 
     return {'d_loss_real':d_lossR, 'd_loss_fake':d_lossG, 'g_loss':g_loss}
 

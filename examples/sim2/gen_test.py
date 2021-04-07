@@ -13,7 +13,7 @@ import tensorflow as tf
 
 rng = numpy.random.default_rng()
 
-def make_microbes(targets, ntaxa):
+def make_microbes(targets, ntaxa, plot=True):
   """
   create random microbial community data
   targets is list of labels
@@ -58,12 +58,13 @@ def make_microbes(targets, ntaxa):
   retr_data = numpy.flip(norm_data, axis=1)
 
   # plot the sorted column means
-  sorted_col_means = numpy.sort(col_means[-1])[::-1]
-  geo_col_means    = scipy.stats.gmean(sorted_col_means)
-  norm_col_means   = numpy.log(numpy.divide(sorted_col_means, geo_col_means))
+  if plot:
+    sorted_col_means = numpy.sort(col_means[-1])[::-1]
+    geo_col_means    = scipy.stats.gmean(sorted_col_means)
+    norm_col_means   = numpy.log(numpy.divide(sorted_col_means, geo_col_means))
 
-  x = numpy.linspace(1,ntaxa,num=ntaxa)
-  plt.plot(x, norm_col_means, 'o', color='gray')
+    x = numpy.linspace(1,ntaxa,num=ntaxa)
+    plt.plot(x, norm_col_means, 'o', color='gray')
 
   return retr_data
 
@@ -75,7 +76,7 @@ def make_data(outfname, ntaxa, nsamples):
   """
   # generate random target labels
   targets  = rng.choice([0,1], size=nsamples)
-  microbes = make_microbes(targets, ntaxa)
+  microbes = make_microbes(targets, ntaxa, plot=True)
 
   # plot a random example datasets
   x = numpy.linspace(1,ntaxa,num=ntaxa)
@@ -141,13 +142,14 @@ def test_generator(ntaxa, nsamples, generator_file):
   lbls_zros = numpy.zeros(shape=nsamples)
 
   # generate real data
-  realdata_ones = make_microbes(lbls_ones, ntaxa)
-  realdata_zros = make_microbes(lbls_zros, ntaxa)
+  realdata_ones = make_microbes(lbls_ones, ntaxa, plot=False)
+  realdata_zros = make_microbes(lbls_zros, ntaxa, plot=False)
 
   # generate fake data
-  fakedata_ones = generator(lbls_ones, training=False)\
+  # result from generator should be (data,labels)
+  fakedata_ones = generator(lbls_ones, training=False)[0]\
                            .numpy().reshape((nsamples,ntaxa))
-  fakedata_zros = generator(lbls_zros, training=False)\
+  fakedata_zros = generator(lbls_zros, training=False)[0]\
                            .numpy().reshape((nsamples,ntaxa))
 
   # plot data
