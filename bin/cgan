@@ -304,6 +304,8 @@ if __name__ == '__main__':
   # neural network architecture
   parser.add_argument('--gen_blocks', dest='gen_blocks', type=int,
                       help='number of generator blocks', metavar='N')
+  parser.add_argument('--disc_blocks', dest='disc_blocks', type=int,
+                      help='number of discriminator blocks', metavar=N)
   parser.add_argument('--filters', dest='n_filters', type=int,
                       help='number of neurons or filters', metavar='N')
   parser.add_argument('--lipschitz', dest='lipschitz', choices=['gp', 'sn'],
@@ -322,7 +324,7 @@ if __name__ == '__main__':
                       help='discriminator learning rate multiplier',
                       metavar='N')
   parser.add_argument('--update_n', dest='update_n', type=int,
-                      help='update discriminator X-times per generator',
+                      help='update discriminator N-times per generator',
                       metavar='N')
 
   parser.set_defaults(verbose=True,
@@ -331,7 +333,8 @@ if __name__ == '__main__':
                       data_dim=256,
                       label_dim=1,
                       batch_size=32,
-                      gen_blocks=4,
+                      gen_blocks=8,
+                      disc_blocks=4,
                       n_filters=128,
                       lipschitz='sn',
                       optimizer='adam',
@@ -361,7 +364,7 @@ if __name__ == '__main__':
     gradpenalty = True
   discriminator = build_discriminator(args.data_dim,
                                       args.label_dim,
-                                      args.gen_blocks,
+                                      args.disc_blocks,
                                       args.n_filters,
                                       gradpenalty)
   generator     = buildGenerator(data_dim=args.data_dim,
