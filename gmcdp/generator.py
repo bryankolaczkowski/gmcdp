@@ -77,7 +77,8 @@ def _buildGenBlock(filters,
                    relu_alpha,
                    name,
                    latent_space,
-                   input):
+                   input,
+                   choke):
   """
   builds a generator block
   implements noise injection into layers from
@@ -96,26 +97,28 @@ def _buildGenBlock(filters,
                                                          name+'_ada',
                                                          latent_space)
 
+  in1 = input
   # transform input into filters 'feature maps'
   # up/down samples feature maps, providing choke points for dense net
-  con1 = tf.keras.layers.Conv1D(filters,
-                                1,
-                                padding='same',
-                                use_bias=use_bias,
-                                kernel_initializer=init,
-                                name=name+'_c1')(input)
-  # activation
-  c1act = tf.keras.layers.LeakyReLU(alpha=relu_alpha, name=name+'_c1act')(con1)
+  if choke:
+    in1 = tf.keras.layers.Conv1D(filters,
+                                 1,
+                                 padding='same',
+                                  use_bias=use_bias,
+                                  kernel_initializer=init,
+                                  name=name+'_chk')(input)
+    in1 = tf.keras.layers.LeakyReLU(alpha=relu_alpha,
+                                    name=name+'_chkact')(in1)
   # convolution-activation block
-  con2 = tf.keras.layers.Conv1D(filters,
-                                filtersize,
-                                padding='same',
-                                use_bias=use_bias,
-                                kernel_initializer=init,
-                                name=name+'_c2')(c1act)
-  c2act = tf.keras.layers.LeakyReLU(alpha=relu_alpha, name=name+'_c2act')(con2)
+  con = tf.keras.layers.Conv1D(filters,
+                               filtersize,
+                               padding='same',
+                               use_bias=use_bias,
+                               kernel_initializer=init,
+                               name=name+'_con')(in1)
+  cact = tf.keras.layers.LeakyReLU(alpha=relu_alpha, name=name+'_conact')(con)
   # adaptive noise injection
-  noi = customlayers.AdaptiveGaussianNoise(name=name+'_noi')([c2act,
+  noi = customlayers.AdaptiveGaussianNoise(name=name+'_noi')([cact,
                                                               noise_scale])
   # adaptive instance normalization
   nor = customlayers.AdaInstanceNormalization(center=True, scale=True,
@@ -139,12 +142,20 @@ def _buildDataSubnet(dim,
   """
   namebase = 'gen_dta' # base for layer names
   lname    = namebase + '_lin'
-  # linear transformation of constant input to data dimensions
-  out = customlayers.LinearInput(dim,
+  # linear transformations of constant input to data dimensions x filters
+  lin = customlayers.LinearInput(dim,
+                                 filters,
                                  use_bias=use_bias,
                                  kernel_initializer=init,
                                  name=lname)(latent_space)
-  out = customlayers.StandardGaussianNoise(name=lname+'_noi')(out)
+  # apply style-specific noise
+  ns = _buildLatentSpaceSngl(filters,
+                             use_bias,
+                             init,
+                             relu_alpha,
+                             lname+'_ns',
+                             latent_space)
+  out = customlayers.AdaptiveGaussianNoise(name=lname+'_noi')([lin,ns])
   # data generator blocks
   for i in range(blocks):
     nbase = namebase + '_blk{}'.format(i)
@@ -155,7 +166,8 @@ def _buildDataSubnet(dim,
                          relu_alpha,
                          nbase,
                          latent_space,
-                         out)
+                         out,
+                         i>0)
   # bidirectional LSTM over concatenated feature maps
   bdr = tf.keras.layers.Bidirectional(
                               tf.keras.layers.LSTM(filters//2,
@@ -184,7 +196,8 @@ def _buildLabelSubnet(dim,
   namebase = 'gen_labl' # base for layer names
   # input layers
   lin = tf.keras.layers.Input(shape=dim, name=namebase+'_in')
-  out = tf.keras.layers.Flatten(name=namebase+'_in_fltn')(lin)
+  oht = customlayers.BinaryOneHotEncoding(name=namebase+'_onehot')(lin)
+  out = tf.keras.layers.Flatten(name=namebase+'_in_fltn')(oht)
   # dense blocks
   for i in range(blocks):
     nbase = namebase + '_blk{}'.format(i)

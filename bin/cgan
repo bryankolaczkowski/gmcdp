@@ -21,7 +21,7 @@ from   tensorflow.keras import layers, Model, Sequential, optimizers, losses, \
 from tensorflow.keras.layers.experimental import preprocessing
 
 from   gmcdp._version     import __version__
-from   gmcdp.customlayers import SpectralNormalization
+from   gmcdp.customlayers import SpectralNormalization, BinaryOneHotEncoding
 from   gmcdp.generator    import buildGenerator
 
 ### class definitions ----------------------------------------------------------
@@ -181,7 +181,8 @@ def build_discriminator(data_dim, label_dim, blocks, fltrs, grad_penalty):
   lin = layers.Input(shape=(label_dim))
 
   # linear projection of labels
-  lpr = _get_disc_dense(data_dim*label_dim, init, grad_penalty)(lin)
+  oht = BinaryOneHotEncoding()(lin)
+  lpr = _get_disc_dense(data_dim*label_dim, init, grad_penalty)(oht)
   lpr = layers.Reshape((data_dim, label_dim))(lpr)
 
   # concatenate linear projection of labels to data
@@ -316,6 +317,13 @@ if __name__ == '__main__':
                       help='optimizer to use')
   parser.add_argument('--learning_rate', dest='learn_rate', type=float,
                       help='base learning rate for optimizer', metavar='N')
+  parser.add_argument('--learning_rate_mult', dest='learn_rate_mult',
+                      type=float,
+                      help='discriminator learning rate multiplier',
+                      metavar='N')
+  parser.add_argument('--update_n', dest='update_n', type=int,
+                      help='update discriminator X-times per generator',
+                      metavar='N')
 
   parser.set_defaults(verbose=True,
                       file=None,
@@ -327,12 +335,10 @@ if __name__ == '__main__':
                       n_filters=128,
                       lipschitz='sn',
                       optimizer='adam',
-                      learn_rate=1.0e-4,
+                      learn_rate=1.0e-5,
+                      learn_rate_mult=2.0,
+                      update_n=2,
                       epochs=1000)
-
-  ## baked constants (for now) ##
-  disc_updates_per_gen = 1    # number of discriminator/generator updates
-  disc_learn_rate_mult = 5.0  # discriminator learn-rate = N * gen learn rate
 
   args = parser.parse_args()
 
@@ -374,12 +380,12 @@ if __name__ == '__main__':
                                  label_initializer=None)
 
   # build GAN
-  gan = biGAN(discriminator, generator, disc_updates_per_gen, gradpenalty)
+  gan = biGAN(discriminator, generator, args.update_n, gradpenalty)
 
   # set up optimizers
   # implements 2-timescale update rule from https://arxiv.org/pdf/1706.08500.pdf
   genr_lr = args.learn_rate
-  disc_lr = disc_learn_rate_mult * genr_lr
+  disc_lr = args.learn_rate_mult * genr_lr
   genr_opt = optimizers.RMSprop(learning_rate=genr_lr)
   disc_opt = optimizers.RMSprop(learning_rate=disc_lr)
   if args.optimizer == 'adam':

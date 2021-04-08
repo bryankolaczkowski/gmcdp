@@ -1,6 +1,22 @@
 import tensorflow as tf
 from tensorflow.python.keras import backend as K
 
+
+class BinaryOneHotEncoding(tf.keras.layers.Layer):
+  def __init__(self, **kwargs):
+    super(BinaryOneHotEncoding, self).__init__(**kwargs)
+    return
+
+  def build(self, input_shape):
+    return
+
+  def call(self, inputs):
+    return tf.one_hot(tf.cast(inputs, tf.int32), 2)
+
+  def get_config(self):
+    return super(BinaryOneHotEncoding, self).get_config()
+
+
 class StandardGaussianNoise(tf.keras.layers.Layer):
   """
   adds standard gaussian noise to a tensor
@@ -19,7 +35,7 @@ class StandardGaussianNoise(tf.keras.layers.Layer):
 
   def get_config(self):
     return super(StandardGaussianNoise, self).get_config()
-    
+
 
 class AdaptiveGaussianNoise(tf.keras.layers.Layer):
   """
@@ -49,15 +65,16 @@ class LinearInput(tf.keras.layers.Layer):
   """
   def __init__(self,
                data_dim,
+               filters,
                use_bias,
                kernel_initializer=None,
                **kwargs):
     super(LinearInput, self).__init__(**kwargs)
-    self.linear  = tf.keras.layers.Dense(units=data_dim,
+    self.linear  = tf.keras.layers.Dense(units=data_dim * filters,
                                          use_bias=use_bias,
                                          kernel_initializer=kernel_initializer,
                                          name='linear')
-    self.reshape = tf.keras.layers.Reshape(target_shape=(data_dim,1),
+    self.reshape = tf.keras.layers.Reshape(target_shape=(data_dim,filters),
                                            name='reshp')
     return
 
