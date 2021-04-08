@@ -207,7 +207,7 @@ def build_discriminator(data_dim, label_dim, blocks, fltrs, grad_penalty):
   dout = layers.Flatten()(dout)
 
   # decision layers
-  deci = _get_disc_dense(fltrs, init, grad_penalty)(dout)
+  deci = _get_disc_dense(fltrs//2, init, grad_penalty)(dout)
   acti = layers.LeakyReLU(alpha=relualpha)(deci)
   mout = layers.Dense(1, kernel_initializer=init)(acti)
   return Model(inputs=(din,lin), outputs=mout, name='discriminator')
