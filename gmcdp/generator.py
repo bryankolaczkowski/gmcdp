@@ -196,8 +196,7 @@ def _buildLabelSubnet(dim,
   namebase = 'gen_labl' # base for layer names
   # input layers
   lin = tf.keras.layers.Input(shape=dim, name=namebase+'_in')
-  oht = customlayers.BinaryOneHotEncoding(name=namebase+'_onehot')(lin)
-  out = tf.keras.layers.Flatten(name=namebase+'_in_fltn')(oht)
+  out = customlayers.BinaryOneHotEncoding(name=namebase+'_onehot')(lin)
   # dense blocks
   for i in range(blocks):
     nbase = namebase + '_blk{}'.format(i)
