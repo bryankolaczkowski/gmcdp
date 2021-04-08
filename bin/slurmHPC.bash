@@ -7,10 +7,12 @@
 
 # cpu resources
 #SBATCH  --nodes=1
-#SBATCH  --ntasks-per-node=8
-#SBATCH  --mem-per-cpu=500MB
+#SBATCH  --tasks=1
+#SBATCH  --cpus-per-task=8
+#SBATCH  --mem-per-cpu=2GB
 
 # gpu resources and queue
+#SBATCH  --partition=gpu
 #SBATCH  --gres=gpu:1
 #SBATCH  --account=microbiome-ai
 #SBATCH  --qos=microbiome-ai
@@ -24,9 +26,10 @@ echo "date $(date)"
 echo "host $(hostname -s)"
 echo "dir  $(pwd)"
 
+echo "starting."
 tbeg=$(date +%s)
 ## begin analysis commands ##
-
+./cgan -f ../examples/sim2/data.csv
 ## done  analysis commands ##
 tend=$(date +%s)
 
