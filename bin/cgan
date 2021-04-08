@@ -305,7 +305,7 @@ if __name__ == '__main__':
   parser.add_argument('--gen_blocks', dest='gen_blocks', type=int,
                       help='number of generator blocks', metavar='N')
   parser.add_argument('--disc_blocks', dest='disc_blocks', type=int,
-                      help='number of discriminator blocks', metavar=N)
+                      help='number of discriminator blocks', metavar='N')
   parser.add_argument('--filters', dest='n_filters', type=int,
                       help='number of neurons or filters', metavar='N')
   parser.add_argument('--lipschitz', dest='lipschitz', choices=['gp', 'sn'],
