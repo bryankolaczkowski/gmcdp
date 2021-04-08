@@ -374,7 +374,7 @@ if __name__ == '__main__':
 
                                  label_dim=args.label_dim,
                                  label_blocks=args.gen_blocks,
-                                 label_filters=args.n_filters//2,
+                                 label_filters=args.n_filters,
                                  label_bias=False,
                                  label_relu_alpha=0.2,
                                  label_initializer=None)

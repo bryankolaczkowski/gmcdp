@@ -214,7 +214,7 @@ def buildGenerator(data_dim=None,
 
                    label_dim=None,
                    label_blocks=4,
-                   label_filters=64,
+                   label_filters=128,
                    label_bias=False,
                    label_relu_alpha=0.2,
                    label_initializer=None):
