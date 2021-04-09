@@ -400,13 +400,14 @@ if __name__ == '__main__':
 
   # set up output base name
   outbasename = args.file
-  if args.outdir:
-    basename = os.path.basename(args.file)
-    if not os.path.exists(args.outdir):
-      sys.stderr.write('ERRR: outdir {} in existential crisis'\
-                       .format(args.outdir))
-      sys.exit(1)
-    outbasename = os.path.join(args.outdir, basename)
+  if not args.outdir:
+    args.outdir = './'
+  basename = os.path.basename(args.file)
+  if not os.path.exists(args.outdir):
+    sys.stderr.write('ERRR: outdir {} in existential crisis'\
+                     .format(args.outdir))
+    sys.exit(1)
+  outbasename = os.path.join(args.outdir, basename)
 
   # set up checkpoints
   #ckptfname = outbasename + '.ckpt'
