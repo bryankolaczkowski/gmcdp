@@ -143,19 +143,33 @@ def _buildDataSubnet(dim,
   namebase = 'gen_dta' # base for layer names
   lname    = namebase + '_lin'
   # linear transformations of constant input to data dimensions x filters
-  lin = customlayers.LinearInput(dim,
-                                 filters,
-                                 use_bias=use_bias,
-                                 kernel_initializer=init,
-                                 name=lname)(latent_space)
+  #lin = customlayers.LinearInput(dim,
+  #                               filters,
+  #                               use_bias=use_bias,
+  #                               kernel_initializer=init,
+  #                               name=lname)(latent_space)
   # apply style-specific noise
-  ns = _buildLatentSpaceSngl(filters,
-                             use_bias,
-                             init,
-                             relu_alpha,
-                             lname+'_ns',
-                             latent_space)
-  out = customlayers.AdaptiveGaussianNoise(name=lname+'_noi')([lin,ns])
+  #ns = _buildLatentSpaceSngl(filters,
+  #                           use_bias,
+  #                           init,
+  #                           relu_alpha,
+  #                           lname+'_ns',
+  #                           latent_space)
+  #out = customlayers.AdaptiveGaussianNoise(name=lname+'_noi')([lin,ns])
+  mns = _buildLatentSpaceSngl(dim,
+                              use_bias,
+                              init,
+                              relu_alpha,
+                              lname+'_mean',
+                              latent_space)
+  sdv = _buildLatentSpaceSngl(dim,
+                              use_bias,
+                              init,
+                              relu_alpha,
+                              lname+'_stdv',
+                              latent_space)
+  out = customlayers.NoisyInput(name=lname)([mns,sdv])
+  out = tf.keras.layers.Reshape(target_shape=(dim,1), name=lname+'_rshp')(out)
   # data generator blocks
   for i in range(blocks):
     nbase = namebase + '_blk{}'.format(i)
@@ -167,7 +181,7 @@ def _buildDataSubnet(dim,
                          nbase,
                          latent_space,
                          out,
-                         i>0)
+                         True)
   # bidirectional LSTM over concatenated feature maps
   bdr = tf.keras.layers.Bidirectional(
                               tf.keras.layers.LSTM(filters//2,

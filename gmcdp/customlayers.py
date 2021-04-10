@@ -59,6 +59,27 @@ class AdaptiveGaussianNoise(tf.keras.layers.Layer):
     return super(AdaptiveGaussianNoise, self).get_config()
 
 
+class NoisyInput(tf.keras.layers.Layer):
+  """
+  input layer with controlled gaussian noise
+  """
+  def __init__(self, **kwargs):
+    super(NoisyInput, self).__init__(**kwargs)
+    return
+
+  def build(self, data_shape):
+    return
+
+  def call(self, inputs):
+    means = inputs[0]
+    stdvs = inputs[1]
+    return tf.random.normal(shape=tf.shape(means), mean=means, stddev=stdvs)
+
+  def get_config(self):
+    config = super(NoisyInput, self).get_config()
+    return config
+
+
 class LinearInput(tf.keras.layers.Layer):
   """
   linear input layer
