@@ -2,7 +2,31 @@ import tensorflow as tf
 from tensorflow.python.keras import backend as K
 
 
+class NoisyBinaryOneHotEncoding(tf.keras.layers.Layer):
+  """
+  encodes a [0,1] integer as 'noisy' one-hot
+  """
+  def __init__(self, **kwargs):
+    super(NoisyBinaryOneHotEncoding, self).__init__(**kwargs)
+    return
+
+  def build(self, input_shape):
+    return
+
+  def call(self, inputs):
+    onehot  = tf.one_hot(tf.cast(inputs, tf.int32), 2)
+    noise   = tf.random.uniform(shape=tf.shape(onehot), minval=0.0, maxval=0.2)
+    normd,n = tf.linalg.normalize(onehot+noise, axis=-1, ord=1)
+    return normd
+
+  def get_config(self):
+    return super(NoisyBinaryOneHotEncoding, self).get_config()
+
+
 class BinaryOneHotEncoding(tf.keras.layers.Layer):
+  """
+  encodes a [0,1] integer as one-hot
+  """
   def __init__(self, **kwargs):
     super(BinaryOneHotEncoding, self).__init__(**kwargs)
     return

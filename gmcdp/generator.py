@@ -15,9 +15,9 @@ def _buildDenseBlock(filters, use_bias, init, relu_alpha, name, input):
   return ra
 
 def _buildLatentSpaceSngl(filters,
+                          activation,
                           use_bias,
                           init,
-                          relu_alpha,
                           name,
                           latent_space):
   """
@@ -25,18 +25,17 @@ def _buildLatentSpaceSngl(filters,
   returns a (?,1,filters) control vector
   """
   out = tf.keras.layers.Dense(filters,
+                              activation=activation,
                               use_bias=use_bias,
                               kernel_initializer=init,
                               name=name)(latent_space)
   out = tf.keras.layers.Reshape(target_shape=(1,filters),
                                 name=name+'_rshp')(out)
-  out = tf.keras.layers.LeakyReLU(alpha=relu_alpha, name=name+'_act')(out)
   return out
 
 def _buildLatentSpaceBlock(filters,
                            use_bias,
                            init,
-                           relu_alpha,
                            name,
                            latent_space):
   """
@@ -46,25 +45,25 @@ def _buildLatentSpaceBlock(filters,
   # data scaling for AdaIN
   nbase = name + '_ds'
   ds = _buildLatentSpaceSngl(filters,
+                             tf.keras.activations.softplus,
                              use_bias,
                              init,
-                             relu_alpha,
                              nbase,
                              latent_space)
   # data bias for AdaIN
   nbase = name + '_bs'
   bs = _buildLatentSpaceSngl(filters,
+                             None,
                              use_bias,
                              init,
-                             relu_alpha,
                              nbase,
                              latent_space)
   # noise scaling for AdaptiveGaussianNoise
   nbase = name + '_ns'
   ns = _buildLatentSpaceSngl(filters,
+                             tf.keras.activations.softplus,
                              use_bias,
                              init,
-                             relu_alpha,
                              nbase,
                              latent_space)
   # return tuple
@@ -93,7 +92,6 @@ def _buildGenBlock(filters,
   data_scale, bias, noise_scale = _buildLatentSpaceBlock(filters,
                                                          use_bias,
                                                          init,
-                                                         relu_alpha,
                                                          name+'_ada',
                                                          latent_space)
 
@@ -104,9 +102,9 @@ def _buildGenBlock(filters,
     in1 = tf.keras.layers.Conv1D(filters,
                                  1,
                                  padding='same',
-                                  use_bias=use_bias,
-                                  kernel_initializer=init,
-                                  name=name+'_chk')(input)
+                                 use_bias=use_bias,
+                                 kernel_initializer=init,
+                                 name=name+'_chk')(input)
     in1 = tf.keras.layers.LeakyReLU(alpha=relu_alpha,
                                     name=name+'_chkact')(in1)
   # convolution-activation block
@@ -157,15 +155,15 @@ def _buildDataSubnet(dim,
   #                           latent_space)
   #out = customlayers.AdaptiveGaussianNoise(name=lname+'_noi')([lin,ns])
   mns = _buildLatentSpaceSngl(dim,
+                              None,
                               use_bias,
                               init,
-                              relu_alpha,
                               lname+'_mean',
                               latent_space)
   sdv = _buildLatentSpaceSngl(dim,
+                              tf.keras.activations.softplus,
                               use_bias,
                               init,
-                              relu_alpha,
                               lname+'_stdv',
                               latent_space)
   out = customlayers.NoisyInput(name=lname)([mns,sdv])
@@ -210,7 +208,7 @@ def _buildLabelSubnet(dim,
   namebase = 'gen_labl' # base for layer names
   # input layers
   lin = tf.keras.layers.Input(shape=dim, name=namebase+'_in')
-  out = customlayers.BinaryOneHotEncoding(name=namebase+'_onehot')(lin)
+  out = customlayers.NoisyBinaryOneHotEncoding(name=namebase+'_onehot')(lin)
   # dense blocks
   for i in range(blocks):
     nbase = namebase + '_blk{}'.format(i)
