@@ -181,18 +181,18 @@ def _buildDataSubnet(dim,
                          out,
                          True)
   # bidirectional LSTM over concatenated feature maps
-  bdr = tf.keras.layers.Bidirectional(
-                              tf.keras.layers.LSTM(filters//2,
-                                                   kernel_initializer=init,
-                                                   return_sequences=True),
-                              name='gen_lstm')(out)
+  #bdr = tf.keras.layers.Bidirectional(
+  #                            tf.keras.layers.LSTM(filters//2,
+  #                                                 kernel_initializer=init,
+  #                                                 return_sequences=True),
+  #                            name='gen_lstm')(out)
   # final generator output becomes data
   out = tf.keras.layers.Conv1D(1,
                                filtersize,
                                padding='same',
                                use_bias=use_bias,
                                kernel_initializer=init,
-                               name='gen_out')(bdr)
+                               name='gen_out')(out)
   return out
 
 def _buildLabelSubnet(dim,
