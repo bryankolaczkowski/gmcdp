@@ -203,8 +203,6 @@ def build_discriminator(data_dim, label_dim, blocks, fltrs, grad_penalty):
   # downsample features
   dout = _get_disc_conv1d(fltrs, filtersize, init, grad_penalty)(dout)
   dout = layers.LeakyReLU(alpha=relualpha)(dout)
-  dout = _get_disc_conv1d(fltrs//2, filtersize, init, grad_penalty)(dout)
-  dout = layers.LeakyReLU(alpha=relualpha)(dout)
 
   # decision layer
   flt  = layers.Flatten()(dout)
