@@ -221,23 +221,43 @@ if __name__ == '__main__':
   gan = CondGan1D(generator=gen, discriminator=dis, pack_dim=pack_dim)
   gan.compile(optimizer=opt)
 
-  # logging callback
-  import os
+  # generated data image callback
+  import io
+  import numpy as np
+  import matplotlib.pyplot as plt
   class PlotCallback(tf.keras.callbacks.Callback):
-    def __init__(self, lfname='log.csv'):
-      self.lfname = lfname
-      if os.path.exists(lfname):
-        os.remove(lfname)
+    def __init__(self, log_dir='logs'):
+      self.writer = tf.summary.create_file_writer(log_dir + '/gen')
       return
 
+    def plot_data(self, data):
+      x = np.arange(0,tf.shape(data)[1],1)
+      fig = plt.figure()
+      ax  = fig.add_subplot(111)
+      ax.plot(x, data.numpy().T, 'o', markersize=2, alpha=0.5)
+      ax.set_ylim([-5,+5])
+      return fig
+
+    def plot_to_image(self, plot):
+      buf = io.BytesIO()
+      plt.savefig(buf, format='png')
+      plt.close(plot)
+      buf.seek(0)
+      image = tf.image.decode_png(buf.getvalue(), channels=4)
+      image = tf.expand_dims(image, 0)
+      return image
+
     def on_epoch_end(self, epoch, logs=None):
+      # generate 10 example datas
       x = self.model((dtas[0:10],lbls[0:10,]))[0]
-      with open(self.lfname, 'a') as outf:
-        dta = x.numpy()
-        for y in dta:
-          y.tofile(outf, sep=",")
-          outf.write('\n')
+      fig = self.plot_data(x)
+      img = self.plot_to_image(fig)
+      with self.writer.as_default():
+        tf.summary.image('GenData', img, step=epoch)
       return
 
   # fit gan
-  gan.fit(data, epochs=10000, callbacks=[PlotCallback()])
+  gan.fit(data,
+          epochs=10000,
+          callbacks=[tf.keras.callbacks.TensorBoard(),
+                     PlotCallback()])
