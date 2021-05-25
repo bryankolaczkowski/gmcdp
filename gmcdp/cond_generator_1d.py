@@ -238,18 +238,9 @@ class SpecNormTransBlock(TransBlock):
     return
 
 
-class Noise(ConfigLayer):
-  """
-  learnable gaussian noise addition
-  """
-  def __init__(self, *args, **kwargs):
-    super(Noise, self).__init__(*args, **kwargs)
-    return
-
-
 class UpsamplTransBlock(TransBlock):
   """
-  learnable transformer->noise->upsample block
+  base class for transformer->upsample->noise blocks
   """
   def __init__(self, *args, **kwargs):
     super(UpsamplTransBlock, self).__init__(*args, **kwargs)
@@ -260,6 +251,29 @@ class UpsamplTransBlock(TransBlock):
                                   regularizer=self.kernel_regularizer,
                                   trainable=True,
                                   constraint=tf.keras.constraints.NonNeg())
+    return
+
+  def _upsample(self, inputs):
+    """
+    override private method to upsample inputs
+    """
+    raise NotImplementedError
+
+  def call(self, inputs):
+    x = super(UpsamplTransBlock, self).call(inputs)   # transformer block
+    x = self._upsample(x)                             # upsampling
+    n = tf.random.normal(shape=tf.shape(x))           # gaussian noise
+    x = x + n * (self.nscale + 1e-8)                  # scale noise
+    return x
+
+
+class ConvUpsamplTransBlock(UpsamplTransBlock):
+  """
+  learnable transformer->upsample->noise block using convolutional upsampling
+  """
+  def __init__(self, *args, **kwargs):
+    super(ConvUpsamplTransBlock, self).__init__(*args, **kwargs)
+    # construct
     self.upsmpl = tf.keras.layers.Conv1DTranspose(filters=self.latent_dim,
                                     kernel_size=3,
                                     strides=2,
@@ -273,14 +287,31 @@ class UpsamplTransBlock(TransBlock):
                                     bias_constraint=self.bias_constraint)
     return
 
-  def call(self, inputs):
+  def _upsample(self, inputs):
     """
+    convolution-based upsampling
+    """
+    return self.upsmpl(inputs)
 
+
+class AveUpsamplTransBlock(UpsamplTransBlock):
+  """
+  transformer->upsample->noise block using average upsampling
+  """
+  def __init__(self, *args, **kwargs):
+    super(AveUpsamplTransBlock, self).__init__(*args, **kwargs)
+    self.upspl = tf.keras.layers.UpSampling1D(size=2)
+    self.avepl = tf.keras.layers.AveragePooling1D(pool_size=3,
+                                                  strides=1,
+                                                  padding='same')
+    return
+
+  def _upsample(self, inputs):
     """
-    x = super(UpsamplTransBlock, self).call(inputs)   # transformer block
-    n = tf.random.normal(shape=tf.shape(x))           # gaussian noise
-    x = x + n * (self.nscale + 1e-8)                  # scale noise
-    x = self.upsmpl(x)                                # upsampling
+    average-based upsampling
+    """
+    x = self.upspl(inputs)    # duplicative upsampling
+    x = self.avepl(x)         # average to interpolate values
     return x
 
 
@@ -297,10 +328,10 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8):
   ## transformer->noise->upsample blocks
   nblocks = (int(width).bit_length()) - (int(start_width).bit_length())
   for i in range(nblocks):
-    output = UpsamplTransBlock(latent_dim=latent_dim,
-                               attn_hds=attn_hds,
-                               key_dim=latent_dim,
-                               name='utb_{}'.format(i))(output)
+    output = AveUpsamplTransBlock(latent_dim=latent_dim,
+                                  attn_hds=attn_hds,
+                                  key_dim=latent_dim,
+                                  name='utb_{}'.format(i))(output)
   # map latent space to data space
   output = PointwiseLinMap(out_dim=1, name='plnmp')(output)
   output = tf.keras.layers.Flatten(name='dtout')(output)
