@@ -213,7 +213,7 @@ if __name__ == '__main__':
   data = data.shuffle(ndata).batch(batchsize)
 
   # create optimizer
-  gopt = tf.keras.optimizers.Adam(learning_rate=5.0e-5, beta_1=0.5, beta_2=0.9)
+  gopt = tf.keras.optimizers.Adam(learning_rate=5.0e-6, beta_1=0.5, beta_2=0.9)
   dopt = tf.keras.optimizers.Adam(learning_rate=1.0e-5, beta_1=0.5, beta_2=0.9)
   opt  = GanOptimizer(gopt, dopt)
 
