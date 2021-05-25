@@ -213,8 +213,8 @@ if __name__ == '__main__':
   data = data.shuffle(ndata).batch(batchsize)
 
   # create optimizer
-  gopt = tf.keras.optimizers.Adam(learning_rate=1.0e-5, beta_1=0.5, beta_2=0.9)
-  dopt = tf.keras.optimizers.Adam(learning_rate=5.0e-5, beta_1=0.5, beta_2=0.9)
+  gopt = tf.keras.optimizers.Adam(learning_rate=5.0e-5, beta_1=0.5, beta_2=0.9)
+  dopt = tf.keras.optimizers.Adam(learning_rate=1.0e-5, beta_1=0.5, beta_2=0.9)
   opt  = GanOptimizer(gopt, dopt)
 
   # create gan
@@ -249,7 +249,7 @@ if __name__ == '__main__':
 
     def on_epoch_end(self, epoch, logs=None):
       # generate 10 example datas
-      x = self.model((dtas[0:10],lbls[0:10,]))[0]
+      x = self.model((dtas[0:10],lbls[0:10]))[0]
       fig = self.plot_data(x)
       img = self.plot_to_image(fig)
       with self.writer.as_default():
