@@ -230,9 +230,6 @@ if __name__ == '__main__':
       self.writer = tf.summary.create_file_writer(log_dir + '/gen')
       return
 
-    def on_train_batch_end(self, batch, logs=None):
-      return
-
     def plot_data(self, data):
       x = np.arange(0,tf.shape(data)[1],1)
       fig = plt.figure()
