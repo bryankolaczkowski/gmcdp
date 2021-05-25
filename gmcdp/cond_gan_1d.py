@@ -213,8 +213,8 @@ if __name__ == '__main__':
   data = data.shuffle(ndata).batch(batchsize)
 
   # create optimizer
-  gopt = tf.keras.optimizers.Nadam(learning_rate=1.0e-6, beta_1=0.9, beta_2=0.99)
-  dopt = tf.keras.optimizers.Nadam(learning_rate=1.0e-5, beta_1=0.9, beta_2=0.99)
+  gopt = tf.keras.optimizers.Nadam(learning_rate=1e-5, beta_1=0.5, beta_2=0.9)
+  dopt = tf.keras.optimizers.Nadam(learning_rate=5e-5, beta_1=0.5, beta_2=0.9)
   opt  = GanOptimizer(gopt, dopt)
 
   # create gan
