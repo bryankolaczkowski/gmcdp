@@ -188,8 +188,8 @@ if __name__ == '__main__':
   sys.path.append("../tests")
   import test_data_generator
 
-  #ndata     = 16344
-  ndata     = 262144
+  ndata     = 16344
+  #ndata     = 262144
   batchsize = 128
   pack_dim  = 4
 
