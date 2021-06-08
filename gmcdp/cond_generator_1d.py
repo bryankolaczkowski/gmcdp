@@ -253,12 +253,14 @@ class UpsamplTransBlock(TransBlock):
                                      bias_regularizer=self.bias_regularizer,
                                      kernel_constraint=self.kernel_constraint,
                                      bias_constraint=self.bias_constraint)
-    #self.nscale = self.add_weight(name='noise_scale',
-    #                              shape=(1,),
-    #                              initializer=tf.keras.initializers.Zeros(),
-    #                              regularizer=self.kernel_regularizer,
-    #                              trainable=True,
-    #                              constraint=tf.keras.constraints.NonNeg())
+    self.nbias  = tf.keras.layers.Dense(units=1,
+                                     use_bias=self.use_bias,
+                                     kernel_initializer=self.kernel_initializer,
+                                     bias_initializer=self.bias_initializer,
+                                     kernel_regularizer=self.kernel_regularizer,
+                                     bias_regularizer=self.bias_regularizer,
+                                     kernel_constraint=self.kernel_constraint,
+                                     bias_constraint=self.bias_constraint)
     return
 
   def _upsample(self, inputs):
@@ -271,7 +273,7 @@ class UpsamplTransBlock(TransBlock):
     x = super(UpsamplTransBlock, self).call(inputs)   # transformer block
     x = self._upsample(x)                             # upsampling
     n = tf.random.normal(shape=tf.shape(x))           # gaussian noise
-    x = x + n * self.nscale(x)                        # scale noise
+    x = x + (n * self.nscale(x) + self.nbias(x))      # scale and bias noise
     return x
 
 
