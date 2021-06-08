@@ -114,22 +114,30 @@ def CondDis1D(data_width,
   output = tf.keras.layers.Concatenate(name='dtalbl')((dinput,loutput))
   # convert data to summary statistics
   output = SummaryStats()(output)
-  #output = SpecNorm(tf.keras.layers.Dense(units=pack_dim,
-  #                               kernel_initializer='glorot_normal'),
-  #                               name='linprj')(output)
+  output = SpecNorm(tf.keras.layers.Dense(units=pack_dim,
+                                 kernel_initializer='glorot_normal'),
+                                 name='linprj')(output)
   # transformer blocks
-  #output = SpecNormTransBlock(latent_dim=pack_dim,
-  #                            attn_hds=attn_hds,
-  #                            key_dim=pack_dim,
-  #                            name='trns_0')(output)
+  output = SpecNormTransBlock(latent_dim=pack_dim,
+                              attn_hds=attn_hds,
+                              key_dim=pack_dim,
+                              name='trns_0')(output)
+  output = SpecNormTransBlock(latent_dim=pack_dim,
+                              attn_hds=attn_hds,
+                              key_dim=pack_dim,
+                              name='trns_1')(output)
+  output = SpecNormTransBlock(latent_dim=pack_dim,
+                              attn_hds=attn_hds,
+                              key_dim=pack_dim,
+                              name='trns_2')(output)
   # sequence model
-  output = tf.keras.layers.Bidirectional(
-                              tf.keras.layers.LSTM(units=32,
-                                  kernel_initializer='glorot_normal'),
-                              name='seqmodl')(output)
+  #output = tf.keras.layers.Bidirectional(
+  #                            tf.keras.layers.LSTM(units=32,
+  #                                kernel_initializer='glorot_normal'),
+  #                            name='seqmodl')(output)
   # decision layers
-  #output = tf.keras.layers.Flatten(name='outflt')(output)
-  #output = SpecNorm(tf.keras.layers.Dense(units=pack_dim*4,),
+  output = tf.keras.layers.Flatten(name='outflt')(output)
+  #output = SpecNorm(tf.keras.layers.Dense(units=pack_dim,),
   #                                        name='desc_0')(output)
   #output = tf.keras.layers.LeakyReLU(alpha=0.2, name='reluac')(output)
   output = tf.keras.layers.Dense(units=1, name='output')(output)
