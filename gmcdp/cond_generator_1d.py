@@ -273,7 +273,7 @@ class UpsamplTransBlock(TransBlock):
     x = super(UpsamplTransBlock, self).call(inputs)   # transformer block
     x = self._upsample(x)                             # upsampling
     n = tf.random.normal(shape=tf.shape(x))           # gaussian noise
-    x = x + (n * self.nscale(x) + self.nbias(x))      # scale and bias noise
+    x = x + (n * self.nscale(x)) + self.nbias(x)      # scale and bias noise
     return x
 
 
