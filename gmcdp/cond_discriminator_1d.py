@@ -71,6 +71,29 @@ class PackedInputMap(Layer):
     return config
 
 
+class SummaryStats(Layer):
+  """
+  packed input -> summary statistics
+  """
+  def __init__(self,
+               **kwargs):
+    super(SummaryStats, self).__init__(**kwargs)
+    return
+
+  def call(self, inputs):
+    """
+    converts a packed input into summary statistics
+    """
+    mean = tf.math.reduce_mean(inputs, axis=-1, keepdims=True)
+    sdev = tf.math.reduce_std( inputs, axis=-1, keepdims=True)
+    resi = mean - inputs
+    return tf.concat([mean,sdev,resi], axis=-1)
+
+  def get_config(self):
+    config = super(SummaryStats, self).get_config()
+    return config
+
+
 def CondDis1D(data_width,
               label_width,
               pack_dim=4,
@@ -89,19 +112,26 @@ def CondDis1D(data_width,
   loutput = PackedInputMap(data_width, name='lblmap')(linput)
   # combine data and projected labels
   output = tf.keras.layers.Concatenate(name='dtalbl')((dinput,loutput))
-  output = SpecNorm(tf.keras.layers.Dense(units=pack_dim,
-                                 kernel_initializer='glorot_normal'),
-                                 name='linprj')(output)
+  # convert data to summary statistics
+  output = SummaryStats()(output)
+  #output = SpecNorm(tf.keras.layers.Dense(units=pack_dim,
+  #                               kernel_initializer='glorot_normal'),
+  #                               name='linprj')(output)
   # transformer blocks
-  output = SpecNormTransBlock(latent_dim=pack_dim,
-                              attn_hds=attn_hds,
-                              key_dim=pack_dim,
-                              name='trns_0')(output)
+  #output = SpecNormTransBlock(latent_dim=pack_dim,
+  #                            attn_hds=attn_hds,
+  #                            key_dim=pack_dim,
+  #                            name='trns_0')(output)
+  # sequence model
+  output = tf.keras.layers.Bidirectional(
+                              tf.keras.layers.LSTM(units=32,
+                                  kernel_initializer='glorot_normal'),
+                              name='seqmodl')(output)
   # decision layers
-  output = tf.keras.layers.Flatten(name='outflt')(output)
-  output = SpecNorm(tf.keras.layers.Dense(units=pack_dim*4,),
-                                          name='desc_0')(output)
-  output = tf.keras.layers.LeakyReLU(alpha=0.2, name='reluac')(output)
+  #output = tf.keras.layers.Flatten(name='outflt')(output)
+  #output = SpecNorm(tf.keras.layers.Dense(units=pack_dim*4,),
+  #                                        name='desc_0')(output)
+  #output = tf.keras.layers.LeakyReLU(alpha=0.2, name='reluac')(output)
   output = tf.keras.layers.Dense(units=1, name='output')(output)
   return Model(inputs=(dinput,linput), outputs=output)
 
