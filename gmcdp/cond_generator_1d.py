@@ -364,7 +364,7 @@ class Noisify(Layer):
     self.n = self.add_weight(shape=(dwdth,ltntd),
                              initializer=tf.keras.initializers.zeros,
                              trainable=True,
-                             constraint=tf.keras.constraints.non_neg)
+                             constraint=tf.keras.constraints.NonNeg())
     return
 
   def call(self, inputs):
