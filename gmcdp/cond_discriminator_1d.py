@@ -7,7 +7,7 @@ from tensorflow.keras.layers import Layer
 import tensorflow as tf
 
 from wrappers import SpecNorm
-from cond_generator_1d import SpecNormTransBlock
+from cond_generator_1d import PointwiseLinMap, DualTransBlock
 
 
 class PackedInputMap(Layer):
@@ -35,14 +35,14 @@ class PackedInputMap(Layer):
     self.kernel_constraint  = constraints.get(kernel_constraint)
     self.bias_constraint    = constraints.get(bias_constraint)
     # construct
-    self.mapl = SpecNorm(tf.keras.layers.Dense(units=self.width,
+    self.mapl = tf.keras.layers.Dense(units=self.width,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
                                     bias_initializer=self.bias_initializer,
                                     kernel_regularizer=self.kernel_regularizer,
                                     bias_regularizer=self.bias_regularizer,
                                     kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint))
+                                    bias_constraint=self.bias_constraint)
     return
 
   def call(self, inputs):
@@ -54,7 +54,8 @@ class PackedInputMap(Layer):
     # independently map each channel's data using linear map
     x = self.mapl(x)
     # un-transpose (bs,channels,width) to (bs,width,channels)
-    return tf.transpose(x, perm=(0,2,1))
+    x = tf.transpose(x, perm=(0,2,1))
+    return x
 
   def get_config(self):
     config = super(LabelDataMap, self).get_config()
@@ -71,32 +72,10 @@ class PackedInputMap(Layer):
     return config
 
 
-class SummaryStats(Layer):
-  """
-  packed input -> summary statistics
-  """
-  def __init__(self,
-               **kwargs):
-    super(SummaryStats, self).__init__(**kwargs)
-    return
-
-  def call(self, inputs):
-    """
-    converts a packed input into summary statistics
-    """
-    mean = tf.math.reduce_mean(inputs, axis=-1, keepdims=True)
-    sdev = tf.math.reduce_std( inputs, axis=-1, keepdims=True)
-    resi = mean - inputs
-    return tf.concat([mean,sdev,resi], axis=-1)
-
-  def get_config(self):
-    config = super(SummaryStats, self).get_config()
-    return config
-
-
 def CondDis1D(data_width,
               label_width,
               pack_dim=4,
+              latent_dim=16,
               attn_hds=8):
   """
   construct a discriminator using functional API
@@ -105,33 +84,33 @@ def CondDis1D(data_width,
   dta_shap = (data_width,pack_dim,)
   lbl_shap = (label_width,pack_dim,)
   ## construct model
-  # data input
+  # data input map
   dinput  = tf.keras.Input(shape=dta_shap, name='dta_in')
-  # project labels to data
+  doutput = PointwiseLinMap(latent_dim, name='dtamap')(dinput)
+  doutput = tf.keras.layers.LayerNormalization(axis=(-2,-1),
+                                               name='dtanrm')(doutput)
+  # label input map
   linput  = tf.keras.Input(shape=lbl_shap, name='lbl_in')
   loutput = PackedInputMap(data_width, name='lblmap')(linput)
-  # combine data and projected labels
-  output = tf.keras.layers.Concatenate(name='dtalbl')((dinput,loutput))
-  # convert data to summary statistics
-  #output = SummaryStats()(output)
-  output = SpecNorm(tf.keras.layers.Dense(units=pack_dim*2,
-                                 kernel_initializer='glorot_normal'),
-                                 name='linprj')(output)
+  loutput = tf.keras.layers.LayerNormalization(axis=(-2,-1),
+                                               name='lblnrm1')(loutput)
+  loutput = PointwiseLinMap(latent_dim, name='lblprj')(loutput)
+  loutput = tf.keras.layers.LayerNormalization(axis=(-2,-1),
+                                               name='lblnrm2')(loutput)
+  # combine data and label maps
+  output = tf.keras.layers.Concatenate(name='dtalbl')((doutput,loutput))
+  latent_dim *= 2
   # transformer blocks
-  output = SpecNormTransBlock(latent_dim=pack_dim*2,
-                              attn_hds=attn_hds,
-                              key_dim=pack_dim,
-                              name='trns_0')(output)
-  # sequence model
-  #output = tf.keras.layers.Bidirectional(
-  #                            tf.keras.layers.LSTM(units=32,
-  #                                kernel_initializer='glorot_normal'),
-  #                            name='seqmodl')(output)
+  output = tf.keras.layers.AveragePooling1D(pool_size=3,
+                                            strides=2,
+                                            padding='same',
+                                            name='dnsmpl')(output)
+  output = DualTransBlock(latent_dim=latent_dim,
+                          attn_hds=attn_hds,
+                          key_dim=latent_dim,
+                          name='trblk0')(output)
   # decision layers
   output = tf.keras.layers.Flatten(name='outflt')(output)
-  #output = SpecNorm(tf.keras.layers.Dense(units=pack_dim,),
-  #                                        name='desc_0')(output)
-  #output = tf.keras.layers.LeakyReLU(alpha=0.2, name='reluac')(output)
   output = tf.keras.layers.Dense(units=1, name='output')(output)
   return Model(inputs=(dinput,linput), outputs=output)
 

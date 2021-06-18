@@ -142,6 +142,7 @@ class PointwiseLinMap(ConfigLayer):
     # config copy
     self.out_dim = out_dim
     # construct
+    """
     self.map = tf.keras.layers.Dense(units=self.out_dim,
                                      use_bias=self.use_bias,
                                      kernel_initializer=self.kernel_initializer,
@@ -150,6 +151,19 @@ class PointwiseLinMap(ConfigLayer):
                                      bias_regularizer=self.bias_regularizer,
                                      kernel_constraint=self.kernel_constraint,
                                      bias_constraint=self.bias_constraint)
+    """
+    self.map = tf.keras.layers.LocallyConnected1D(filters=self.out_dim,
+                                    kernel_size=1,
+                                    strides=1,
+                                    padding='valid',
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint,
+                                    implementation=3)
     return
 
   def call(self, inputs):
@@ -209,22 +223,6 @@ class NormalizedResidualAttention(ConfigLayer):
     return config
 
 
-class NormalizedResidualCrossAttention(NormalizedResidualAttention):
-  """
-  layer-normalized multi-head cross-attention with residual connection
-  """
-  def __init__(self, *args, **kwargs):
-    super(NormalizedResidualCrossAttention, self).__init__(*args, **kwargs)
-    return
-
-  def call(self, inputs):
-    qry = inputs[0]
-    val = inputs[1]
-    nqy = self.lnm(qry)       # layer normalization on query
-    x   = self.mha(nqy, val)  # cross-attention
-    return qry + x
-
-
 class NormalizedResidualFeedForward(ConfigLayer):
   """
   layer-normalized pointwise feed-forward with residual connection
@@ -268,9 +266,9 @@ class NormalizedResidualFeedForward(ConfigLayer):
     return config
 
 
-class TransUpsamplBlock(ConfigLayer):
+class DualTransBlock(ConfigLayer):
   """
-  dual self-attention transformer blocks with average upsampling
+  dual self-attention tranformer blocks with residual connections
   """
   def __init__(self,
                latent_dim,
@@ -278,24 +276,48 @@ class TransUpsamplBlock(ConfigLayer):
                key_dim,
                *args,
                **kwargs):
-    super(TransUpsamplBlock, self).__init__(*args, **kwargs)
+    super(DualTransBlock, self).__init__(*args, **kwargs)
     # config copy
     self.latent_dim = latent_dim
     self.attn_hds   = attn_hds
     self.key_dim    = key_dim
     # construct
     self.attn1 = NormalizedResidualAttention(latent_dim=self.latent_dim,
-                                             attn_hds=self.attn_hds,
-                                             key_dim=self.key_dim)
-    self.ffwd1 = NormalizedResidualFeedForward(latent_dim=self.latent_dim)
+                                    attn_hds=self.attn_hds,
+                                    key_dim=self.key_dim,
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
+    self.ffwd1 = NormalizedResidualFeedForward(latent_dim=self.latent_dim,
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
     self.attn2 = NormalizedResidualAttention(latent_dim=self.latent_dim,
-                                             attn_hds=self.attn_hds,
-                                             key_dim=self.key_dim)
-    self.ffwd2 = NormalizedResidualFeedForward(latent_dim=self.latent_dim)
-    self.upspl = tf.keras.layers.UpSampling1D(size=2)
-    self.avepl = tf.keras.layers.AveragePooling1D(pool_size=3,
-                                                  strides=1,
-                                                  padding='same')
+                                    attn_hds=self.attn_hds,
+                                    key_dim=self.key_dim,
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
+    self.ffwd2 = NormalizedResidualFeedForward(latent_dim=self.latent_dim,
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
     return
 
   def call(self, inputs):
@@ -305,253 +327,40 @@ class TransUpsamplBlock(ConfigLayer):
     # transformer 2
     x = self.attn2(x)
     x = self.ffwd2(x)
+    return x
+
+  def get_config(self):
+    config = super(DualTransBlock, self).get_config()
+    config.update({
+      'latent_dim' : self.latent_dim,
+      'attn_hds'   : self.attn_hds,
+      'key_dim'    : self.key_dim,
+    })
+    return config
+
+
+class DualTransUpsamplBlock(DualTransBlock):
+  """
+  dual self-attention transformer blocks with average upsampling
+  """
+  def __init__(self,
+               *args,
+               **kwargs):
+    super(DualTransUpsamplBlock, self).__init__(*args, **kwargs)
+    self.upspl = tf.keras.layers.UpSampling1D(size=2)
+    self.avepl = tf.keras.layers.AveragePooling1D(pool_size=3,
+                                                  strides=1,
+                                                  padding='same')
+    return
+
+  def call(self, inputs):
+    x = super(DualTransUpsamplBlock, self).call(inputs)
     # upsample
     x = self.upspl(x)
     x = self.avepl(x)
     # noise
 
     return x
-
-  def get_config(self):
-    config = super(TransUpsamplBlock, self).get_config()
-    config.update({
-      'latent_dim' : self.latent_dim,
-      'attn_hds'   : self.attn_hds,
-      'key_dim'    : self.key_dim,
-    })
-    return config
-
-
-
-
-
-
-
-
-
-
-
-
-class CrossAttnTransBlock(ConfigLayer):
-  """
-  (data,label) transformer with cross-attention
-  """
-  def __init__(self,
-               latent_dim,
-               attn_hds,
-               key_dim,
-               *args,
-               **kwargs):
-    super(CrossAttnTransBlock, self).__init__(*args, **kwargs)
-    # config copy
-    self.latent_dim = latent_dim
-    self.attn_hds   = attn_hds
-    self.key_dim    = key_dim
-    # construct
-    # label path
-    self.lbl_self_attn = NormalizedResidualAttention(latent_dim=self.latent_dim,
-                                                  attn_hds=self.attn_hds,
-                                                  key_dim=self.key_dim)
-    self.lbl_feed_frwd = NormalizedResidualFeedForward(\
-                                                  latent_dim=self.latent_dim)
-    # data path
-    self.dta_self_attn = NormalizedResidualAttention(latent_dim=self.latent_dim,
-                                                  attn_hds=self.attn_hds,
-                                                  key_dim=self.key_dim)
-    self.dta_crss_attn = NormalizedResidualCrossAttention(\
-                                                  latent_dim=self.latent_dim,
-                                                  attn_hds=self.attn_hds,
-                                                  key_dim=self.key_dim)
-    self.dta_feed_frwd = NormalizedResidualFeedForward(\
-                                                  latent_dim=self.latent_dim)
-    return
-
-  def call(self, inputs):
-    dta = inputs[0]
-    lbl = inputs[1]
-    # label path
-    lbl = self.lbl_self_attn(lbl)
-    lbl = self.lbl_feed_frwd(lbl)
-    # data path
-    dta = self.dta_self_attn(dta)
-    dta = self.dta_crss_attn((dta, lbl))
-    dta = self.dta_feed_frwd(dta)
-    return (dta, lbl)
-
-  def get_config(self):
-    config = super(CrossAttnTransBlock, self).get_config()
-    config.update({
-      'latent_dim' : self.latent_dim,
-      'attn_hds'   : self.attn_hds,
-      'key_dim'    : self.key_dim,
-    })
-    return config
-
-
-class AveUpsamplCrossAttnTransBlock(CrossAttnTransBlock):
-  """
-  transformer->upsample block using average upsampling
-  """
-  def __init__(self, *args, **kwargs):
-    super(AveUpsamplCrossAttnTransBlock, self).__init__(*args, **kwargs)
-    self.upspl = tf.keras.layers.UpSampling1D(size=2)
-    self.avepl = tf.keras.layers.AveragePooling1D(pool_size=3,
-                                                  strides=1,
-                                                  padding='same')
-    return
-
-  def call(self, inputs):
-    x = super(AveUpsamplCrossAttnTransBlock, self).call(inputs)
-    dta = x[0]
-    lbl = x[1]
-    # upsample data
-    dta = self.upspl(dta)   # duplicative upsampling
-    dta = self.avepl(dta)   # average to interpolate values
-    # upsample labels
-    lbl = self.upspl(lbl)   # duplicative upsampling
-    lbl = self.avepl(lbl)   # average to interpolate values
-    return (dta,lbl)
-
-
-class TransBlock(ConfigLayer):
-  """
-  implements a transformer + feed-forward block
-  """
-  def __init__(self,
-               latent_dim,
-               attn_hds,
-               key_dim,
-               *args,
-               **kwargs):
-    super(TransBlock, self).__init__(*args, **kwargs)
-    # config copy
-    self.latent_dim = latent_dim
-    self.attn_hds   = attn_hds
-    self.key_dim    = key_dim
-    # construct
-    self.mha = tf.keras.layers.MultiHeadAttention(num_heads=self.attn_hds,
-                                    key_dim=self.key_dim,
-                                    use_bias=self.use_bias,
-                                    kernel_initializer=self.kernel_initializer,
-                                    bias_initializer=self.bias_initializer,
-                                    kernel_regularizer=self.kernel_regularizer,
-                                    bias_regularizer=self.bias_regularizer,
-                                    kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint)
-    self.ff1 = tf.keras.layers.Dense(units=self.latent_dim*2,
-                                     use_bias=self.use_bias,
-                                     kernel_initializer=self.kernel_initializer,
-                                     bias_initializer=self.bias_initializer,
-                                     kernel_regularizer=self.kernel_regularizer,
-                                     bias_regularizer=self.bias_regularizer,
-                                     kernel_constraint=self.kernel_constraint,
-                                     bias_constraint=self.bias_constraint)
-    self.ff2 = tf.keras.layers.Dense(units=self.latent_dim,
-                                     use_bias=self.use_bias,
-                                     kernel_initializer=self.kernel_initializer,
-                                     bias_initializer=self.bias_initializer,
-                                     kernel_regularizer=self.kernel_regularizer,
-                                     bias_regularizer=self.bias_regularizer,
-                                     kernel_constraint=self.kernel_constraint,
-                                     bias_constraint=self.bias_constraint)
-    self.ln1 = tf.keras.layers.LayerNormalization(axis=(-2,-1))
-    self.ln2 = tf.keras.layers.LayerNormalization(axis=(-2,-1))
-    return
-
-  def call(self, inputs):
-    """
-    inputs is (bs,width,latent_dim)
-    """
-    ## sub-block 1 - attention
-    x = self.ln1(inputs)  # layer normalization
-    x = self.mha(x,x)     # multi-head attention
-    x = inputs + x        # residual connection
-    ## sub-block 2 - feed-forward
-    y = self.ln2(x)       # layer normalization
-    y = self.ff1(y)       # linear pointwise feed-forward 1
-    y = tf.nn.gelu(y)     # nonlinear activation
-    y = self.ff2(y)       # linear pointwise feed-forward 2
-    x = x + y             # residual connection
-    return x
-
-  def get_config(self):
-    config = super(TransBlock, self).get_config()
-    config.update({
-      'latent_dim' : self.latent_dim,
-      'attn_hds'   : self.attn_hds,
-      'key_dim'    : self.key_dim,
-    })
-    return config
-
-
-class SpecNormTransBlock(TransBlock):
-  """
-  implements a spectral-normalized transformer + feed-forward block
-  """
-  def __init__(self, *args, **kwargs):
-    super(SpecNormTransBlock, self).__init__(*args, **kwargs)
-    self.ff1 = SpecNorm(self.ff1)
-    self.ff2 = SpecNorm(self.ff2)
-    return
-
-
-class UpsamplTransBlock(TransBlock):
-  """
-  base class for transformer->upsample->noise blocks
-  """
-  def __init__(self, *args, **kwargs):
-    super(UpsamplTransBlock, self).__init__(*args, **kwargs)
-    # construct
-    self.nscale = tf.keras.layers.Dense(units=1,
-                                     use_bias=self.use_bias,
-                                     kernel_initializer=self.kernel_initializer,
-                                     bias_initializer=self.bias_initializer,
-                                     kernel_regularizer=self.kernel_regularizer,
-                                     bias_regularizer=self.bias_regularizer,
-                                     kernel_constraint=self.kernel_constraint,
-                                     bias_constraint=self.bias_constraint)
-    return
-
-  def _upsample(self, inputs):
-    """
-    override private method to upsample inputs
-    """
-    raise NotImplementedError
-
-  def call(self, inputs):
-    x = super(UpsamplTransBlock, self).call(inputs)   # transformer block
-    x = self._upsample(x)                             # upsampling
-    n = tf.random.normal(shape=tf.shape(x))           # gaussian noise
-    x = x + n * self.nscale(x)                        # scale noise
-    return x
-
-
-class AveUpsamplTransBlock(UpsamplTransBlock):
-  """
-  transformer->upsample->noise block using average upsampling
-  """
-  def __init__(self, *args, **kwargs):
-    super(AveUpsamplTransBlock, self).__init__(*args, **kwargs)
-    self.upspl = tf.keras.layers.UpSampling1D(size=2)
-    self.avepl = tf.keras.layers.AveragePooling1D(pool_size=3,
-                                                  strides=1,
-                                                  padding='same')
-    return
-
-  def _upsample(self, inputs):
-    """
-    average-based upsampling
-    """
-    x = self.upspl(inputs)    # duplicative upsampling
-    x = self.avepl(x)         # average to interpolate values
-    return x
-
-
-
-
-
-
-
 
 
 def CondGen1D(input_shape, width, latent_dim=16, attn_hds=8, start_width=64):
@@ -567,10 +376,10 @@ def CondGen1D(input_shape, width, latent_dim=16, attn_hds=8, start_width=64):
   ## transformer->transformer->upsample blocks
   nblocks = (int(width).bit_length()) - (int(start_width).bit_length())
   for i in range(nblocks):
-    output = TransUpsamplBlock(latent_dim=latent_dim,
-                               attn_hds=attn_hds,
-                               key_dim=latent_dim,
-                               name='utb_{}'.format(i))(output)
+    output = DualTransUpsamplBlock(latent_dim=latent_dim,
+                                   attn_hds=attn_hds,
+                                   key_dim=latent_dim,
+                                   name='utb_{}'.format(i))(output)
   # map latent space to data space
   output = PointwiseLinMap(out_dim=1, name='plnmp')(output)
   output = tf.keras.layers.Flatten(name='dtout')(output)
