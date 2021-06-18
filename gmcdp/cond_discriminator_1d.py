@@ -101,14 +101,22 @@ def CondDis1D(data_width,
   output = tf.keras.layers.Concatenate(name='dtalbl')((doutput,loutput))
   latent_dim *= 2
   # transformer blocks
-  output = tf.keras.layers.AveragePooling1D(pool_size=3,
-                                            strides=2,
-                                            padding='same',
-                                            name='dnsmpl')(output)
   output = DualTransBlock(latent_dim=latent_dim,
                           attn_hds=attn_hds,
                           key_dim=latent_dim,
                           name='trblk0')(output)
+  output = tf.keras.layers.AveragePooling1D(pool_size=3,
+                                            strides=2,
+                                            padding='same',
+                                            name='dnsmp0')(output)
+  output = DualTransBlock(latent_dim=latent_dim,
+                          attn_hds=attn_hds,
+                          key_dim=latent_dim,
+                          name='trblk1')(output)
+  output = tf.keras.layers.AveragePooling1D(pool_size=3,
+                                            strides=2,
+                                            padding='same',
+                                            name='dnsmp1')(output)
   # decision layers
   output = tf.keras.layers.Flatten(name='outflt')(output)
   output = tf.keras.layers.Dense(units=1, name='output')(output)
