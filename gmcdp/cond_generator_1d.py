@@ -142,7 +142,7 @@ class PointwiseLinMap(ConfigLayer):
     # config copy
     self.out_dim = out_dim
     # construct
-    """
+
     self.map = tf.keras.layers.Dense(units=self.out_dim,
                                      use_bias=self.use_bias,
                                      kernel_initializer=self.kernel_initializer,
@@ -164,6 +164,7 @@ class PointwiseLinMap(ConfigLayer):
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint,
                                     implementation=3)
+    """
     return
 
   def call(self, inputs):
