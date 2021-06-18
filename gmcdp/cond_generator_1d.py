@@ -348,38 +348,28 @@ class DualTransUpsamplBlock(DualTransBlock):
     return x
 
 
-class Noisify(ConfigLayer):
+class Noisify(Layer):
   """
-  adds gaussian noise to a tensor
+  adds adatptive gaussian noise to a tensor
   """
   def __init__(self,
-               latent_dim,
                *args,
                **kwargs):
     super(Noisify, self).__init__(*args, **kwargs)
-    # config copy
-    self.latent_dim = latent_dim
-    # construct
-    self.map = tf.keras.layers.Dense(units=self.latent_dim,
-                                     use_bias=self.use_bias,
-                                     kernel_initializer=self.kernel_initializer,
-                                     bias_initializer=self.bias_initializer,
-                                     kernel_regularizer=self.kernel_regularizer,
-                                     bias_regularizer=self.bias_regularizer,
-                                     kernel_constraint=self.kernel_constraint,
-                                     bias_constraint=self.bias_constraint)
+    return
+
+  def build(self, input_shape):
+    dwdth = input_shape[1]  # data width
+    ltntd = input_shape[2]  # latent dimension
+    self.n = self.add_weight(shape=(dwdth,ltntd),
+                             initializer=tf.keras.initializers.zeros,
+                             trainable=True,
+                             constraint=tf.keras.constraints.non_neg)
     return
 
   def call(self, inputs):
-    n = self.map(inputs)
-    return inputs + (tf.random.normal(shape=tf.shape(inputs)) * n)
-
-  def get_config(self):
-    config = super(Noisify, self).get_config()
-    config.update({
-      'latent_dim' : self.latent_dim,
-    })
-    return config
+    a = tf.random.normal(shape=tf.shape(inputs)) * (self.n + 1.0e-5)
+    return inputs + a
 
 
 def CondGen1D(input_shape, width, latent_dim=16, attn_hds=8, start_width=64):
@@ -399,7 +389,7 @@ def CondGen1D(input_shape, width, latent_dim=16, attn_hds=8, start_width=64):
                                    attn_hds=attn_hds,
                                    key_dim=latent_dim,
                                    name='utb_{}'.format(i))(output)
-    output = Noisify(latent_dim=latent_dim, name='noi_{}'.format(i))(output)
+    output = Noisify(name='noi_{}'.format(i))(output)
   # map latent space to data space
   output = PointwiseLinMap(out_dim=1, name='plnmp')(output)
   output = tf.keras.layers.Flatten(name='dtout')(output)
