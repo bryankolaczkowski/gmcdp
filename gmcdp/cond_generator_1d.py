@@ -9,22 +9,6 @@ import tensorflow as tf
 from wrappers import SpecNorm
 
 
-class Sort(Layer):
-  """
-  sort a tensor in descending order
-  """
-  def __init__(self, **kwargs):
-    super(Sort, self).__init__(**kwargs)
-    return
-
-  def call(self, inputs):
-    """
-    inputs are (bs,width)
-    """
-    x = tf.sort(inputs, direction='DESCENDING')
-    return tf.reshape(x, tf.shape(inputs))
-
-
 class ConfigLayer(Layer):
   """
   base class for layers having sub-layers
@@ -120,24 +104,30 @@ class LayerNormLinMap(LinMap):
     return self.lnm(x)
 
 
-class DataGenLayerNormLinMap(LayerNormLinMap):
+class StochasticLinMap(LayerNormLinMap):
   """
-
+  linear projection with gaussian random noise
   """
   def __init__(self, *args, **kwargs):
-    super(DataGenLayerNormLinMap, self).__init__(*args, **kwargs)
+    super(StochasticLinMap, self).__init__(*args, **kwargs)
+    self.nmap = tf.keras.layers.Dense(units=self.width * self.dim,
+                                     use_bias=self.use_bias,
+                                     kernel_initializer=self.kernel_initializer,
+                                     bias_initializer=self.bias_initializer,
+                                     kernel_regularizer=self.kernel_regularizer,
+                                     bias_regularizer=self.bias_regularizer,
+                                     kernel_constraint=self.kernel_constraint,
+                                     bias_constraint=self.bias_constraint)
     return
 
   def call(self, inputs):
-    # map labels to 'data space'
-    lblmap = super(DataGenLayerNormLinMap, self).call(inputs)
-    # generate standard gaussian noise in 'data space'
-    bs = tf.shape(inputs)[0]                                  # get batch size
-    dtamap = tf.random.normal(shape=(bs,self.width*self.dim)) # random noise
-    dtamap = tf.sort(dtamap, direction='DESCENDING')          # sort noise
-    dtamap = tf.reshape(dtamap, shape=(bs,self.width,self.dim)) # reshape
-    # return (data,labels), all in the same 'data space'
-    return (dtamap, lblmap)
+    x = super(StochasticLinMap, self).call(inputs) # project labels to data
+    bs = tf.shape(inputs)[0]                       # batch size
+    n  = tf.random.normal(shape=(bs,self.width))   # random noise
+    n  = self.nmap(n)                              # project noise to data
+    n  = tf.reshape(n, shape=(bs,self.width,self.dim))  # reshape
+    out = tf.concat([x,n], -1)                          # concat labels, noise
+    return out
 
 
 class PointwiseLinMap(ConfigLayer):
@@ -278,6 +268,70 @@ class NormalizedResidualFeedForward(ConfigLayer):
     return config
 
 
+class TransUpsamplBlock(ConfigLayer):
+  """
+  dual self-attention transformer blocks with average upsampling
+  """
+  def __init__(self,
+               latent_dim,
+               attn_hds,
+               key_dim,
+               *args,
+               **kwargs):
+    super(TransUpsamplBlock, self).__init__(*args, **kwargs)
+    # config copy
+    self.latent_dim = latent_dim
+    self.attn_hds   = attn_hds
+    self.key_dim    = key_dim
+    # construct
+    self.attn1 = NormalizedResidualAttention(latent_dim=self.latent_dim,
+                                             attn_hds=self.attn_hds,
+                                             key_dim=self.key_dim)
+    self.ffwd1 = NormalizedResidualFeedForward(latent_dim=self.latent_dim)
+    self.attn2 = NormalizedResidualAttention(latent_dim=self.latent_dim,
+                                             attn_hds=self.attn_hds,
+                                             key_dim=self.key_dim)
+    self.ffwd2 = NormalizedResidualFeedForward(latent_dim=self.latent_dim)
+    self.upspl = tf.keras.layers.UpSampling1D(size=2)
+    self.avepl = tf.keras.layers.AveragePooling1D(pool_size=3,
+                                                  strides=1,
+                                                  padding='same')
+    return
+
+  def call(self, inputs):
+    # transformer 1
+    x = self.attn1(inputs)
+    x = self.ffwd1(x)
+    # transformer 2
+    x = self.attn2(x)
+    x = self.ffwd2(x)
+    # upsample
+    x = self.upspl(x)
+    x = self.avepl(x)
+    # noise
+
+    return x
+
+  def get_config(self):
+    config = super(TransUpsamplBlock, self).get_config()
+    config.update({
+      'latent_dim' : self.latent_dim,
+      'attn_hds'   : self.attn_hds,
+      'key_dim'    : self.key_dim,
+    })
+    return config
+
+
+
+
+
+
+
+
+
+
+
+
 class CrossAttnTransBlock(ConfigLayer):
   """
   (data,label) transformer with cross-attention
@@ -357,10 +411,6 @@ class AveUpsamplCrossAttnTransBlock(CrossAttnTransBlock):
     lbl = self.upspl(lbl)   # duplicative upsampling
     lbl = self.avepl(lbl)   # average to interpolate values
     return (dta,lbl)
-
-
-
-
 
 
 class TransBlock(ConfigLayer):
@@ -501,25 +551,28 @@ class AveUpsamplTransBlock(UpsamplTransBlock):
 
 
 
-def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8):
+
+
+
+def CondGen1D(input_shape, width, latent_dim=16, attn_hds=8, start_width=64):
   """
   construct generator using functional API
   """
-  start_width = 32  # starting data width
-  # map input to latent space (data,labels), all in 'data space'
+  # map input to latent space
   inputs = tf.keras.Input(shape=input_shape, name='lblin')
-  output = DataGenLayerNormLinMap(width=start_width,
-                                  dim=latent_dim,
-                                  name='linmp')(inputs)
-  ## transformer->upsample blocks
+  output = StochasticLinMap(width=start_width,
+                            dim=latent_dim,
+                            name='linmp')(inputs)
+  latent_dim *= 2
+  ## transformer->transformer->upsample blocks
   nblocks = (int(width).bit_length()) - (int(start_width).bit_length())
   for i in range(nblocks):
-    output = AveUpsamplCrossAttnTransBlock(latent_dim=latent_dim,
-                                           attn_hds=attn_hds,
-                                           key_dim=latent_dim,
-                                           name='utb_{}'.format(i))(output)
+    output = TransUpsamplBlock(latent_dim=latent_dim,
+                               attn_hds=attn_hds,
+                               key_dim=latent_dim,
+                               name='utb_{}'.format(i))(output)
   # map latent space to data space
-  output = PointwiseLinMap(out_dim=1, name='plnmp')(output[0])
+  output = PointwiseLinMap(out_dim=1, name='plnmp')(output)
   output = tf.keras.layers.Flatten(name='dtout')(output)
   return Model(inputs=inputs, outputs=(output,inputs))
 
