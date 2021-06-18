@@ -362,7 +362,7 @@ class Noisify(Layer):
     dwdth = input_shape[1]  # data width
     ltntd = input_shape[2]  # latent dimension
     self.n = self.add_weight(shape=(dwdth,ltntd),
-                             initializer=tf.keras.initializers.zeros,
+                             initializer=tf.keras.initializers.Zeros(),
                              trainable=True,
                              constraint=tf.keras.constraints.NonNeg())
     return
