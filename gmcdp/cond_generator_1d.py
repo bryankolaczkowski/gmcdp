@@ -110,6 +110,7 @@ class StochasticLinMap(LayerNormLinMap):
   """
   def __init__(self, *args, **kwargs):
     super(StochasticLinMap, self).__init__(*args, **kwargs)
+    """
     self.nmap = tf.keras.layers.Dense(units=self.width * self.dim,
                                      use_bias=self.use_bias,
                                      kernel_initializer=self.kernel_initializer,
@@ -118,14 +119,16 @@ class StochasticLinMap(LayerNormLinMap):
                                      bias_regularizer=self.bias_regularizer,
                                      kernel_constraint=self.kernel_constraint,
                                      bias_constraint=self.bias_constraint)
+    """
     return
 
   def call(self, inputs):
     x = super(StochasticLinMap, self).call(inputs) # project labels to data
     bs = tf.shape(inputs)[0]                       # batch size
-    n  = tf.random.normal(shape=(bs,self.width))   # random noise
-    n  = self.nmap(n)                              # project noise to data
-    n  = tf.reshape(n, shape=(bs,self.width,self.dim))  # reshape
+    n  = tf.random.normal(shape=(bs,self.width,self.dim)) # random noise
+    n  = tf.sort(n, axis=-2, direction='DESCENDING')      # sort
+    #n  = self.nmap(n)                              # project noise to data
+    #n  = tf.reshape(n, shape=(bs,self.width,self.dim))  # reshape
     out = tf.concat([x,n], -1)                          # concat labels, noise
     return out
 
@@ -372,7 +375,7 @@ class Noisify(Layer):
     return inputs + a
 
 
-def CondGen1D(input_shape, width, latent_dim=16, attn_hds=8, start_width=64):
+def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8, start_width=64):
   """
   construct generator using functional API
   """
