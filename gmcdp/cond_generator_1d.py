@@ -384,10 +384,10 @@ def CondGen1D(input_shape, width, latent_dim=16, attn_hds=8, start_width=256):
   """
   # map input to latent space
   inputs = tf.keras.Input(shape=input_shape, name='lblin')
-  output = StochasticLinMap(width=start_width,
+  output = LayerNormLinMap(width=start_width,
                             dim=latent_dim,
                             name='linmp')(inputs)
-  latent_dim *= 2
+  #latent_dim *= 2
   ## transformer blocks
   nblocks = (int(width).bit_length()) - (int(start_width).bit_length())
   nblocks = 1
