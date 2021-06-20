@@ -247,7 +247,10 @@ if __name__ == '__main__':
       x = np.arange(0,tf.shape(data)[1],1)
       fig = plt.figure()
       ax  = fig.add_subplot(111)
-      ax.plot(x, data.numpy().T, 'o', markersize=2, alpha=0.5)
+      y   = data.numpy().transpose()
+      y.sort()
+      y = np.flip(y, axis=-1)
+      ax.plot(x, y, 'o', markersize=2, alpha=0.5)
       ax.set_ylim([-5,+5])
       return fig
 
