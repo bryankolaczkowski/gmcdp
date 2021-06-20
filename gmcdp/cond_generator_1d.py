@@ -145,7 +145,6 @@ class PointwiseLinMap(ConfigLayer):
     # config copy
     self.out_dim = out_dim
     # construct
-
     self.map = tf.keras.layers.Dense(units=self.out_dim,
                                      use_bias=self.use_bias,
                                      kernel_initializer=self.kernel_initializer,
@@ -353,6 +352,32 @@ class Noisify(Layer):
     return inputs + a
 
 
+class PointwiseLinNoisify(ConfigLayer):
+  """
+  adaptive gaussian noise scaling based on input
+  """
+  def __init__(self, *args, **kwargs):
+    super(PointwiseLinNoisify, self).__init__(*args, **kwargs)
+    return
+
+  def build(self, input_shape):
+    self.map = tf.keras.layers.Dense(units=input_shape[-1],
+                                     activation=tf.keras.activations.relu,
+                                     use_bias=self.use_bias,
+                                     kernel_initializer=self.kernel_initializer,
+                                     bias_initializer=self.bias_initializer,
+                                     kernel_regularizer=self.kernel_regularizer,
+                                     bias_regularizer=self.bias_regularizer,
+                                     kernel_constraint=self.kernel_constraint,
+                                     bias_constraint=self.bias_constraint)
+    return
+
+  def call(self, inputs):
+    x = self.map(inputs)
+    a = tf.random.normal(shape=tf.shape(inputs)) * (x + 1.0e-5)
+    return inputs + a
+
+
 def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8, start_width=256):
   """
   construct generator using functional API
@@ -371,7 +396,7 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8, start_width=256):
                         attn_hds=attn_hds,
                         key_dim=latent_dim,
                         name='utb_{}'.format(i))(output)
-    output = Noisify(name='noi_{}'.format(i))(output)
+    output = PointwiseLinNoisify(name='noi_{}'.format(i))(output)
   # map latent space to data space
   output = PointwiseLinMap(out_dim=1, name='plnmp')(output)
   output = tf.keras.layers.Flatten(name='dtout')(output)
