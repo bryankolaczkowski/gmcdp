@@ -106,9 +106,9 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=8):
   # decision layers
   output = tf.keras.layers.Flatten(name='outflt')(output)
   output = tf.keras.layers.Dense(units=128)(output)
-  output = tf.keras.layers.LeakyReLU()
+  output = tf.keras.layers.LeakyReLU()(output)
   output = tf.keras.layers.Dense(units=128)(output)
-  output = tf.keras.layers.LeakyReLU()
+  output = tf.keras.layers.LeakyReLU()(output)
   output = tf.keras.layers.Dense(units=1, name='output')(output)
   return Model(inputs=(dinput,linput), outputs=output)
 
