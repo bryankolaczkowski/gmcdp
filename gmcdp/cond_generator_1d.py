@@ -256,9 +256,9 @@ class NormalizedResidualFeedForward(ConfigLayer):
     return config
 
 
-class DualTransBlock(ConfigLayer):
+class TransBlock(ConfigLayer):
   """
-  dual self-attention tranformer blocks with residual connections
+  self-attention tranformer block with residual connections
   """
   def __init__(self,
                latent_dim,
@@ -266,13 +266,13 @@ class DualTransBlock(ConfigLayer):
                key_dim,
                *args,
                **kwargs):
-    super(DualTransBlock, self).__init__(*args, **kwargs)
+    super(TransBlock, self).__init__(*args, **kwargs)
     # config copy
     self.latent_dim = latent_dim
     self.attn_hds   = attn_hds
     self.key_dim    = key_dim
     # construct
-    self.attn1 = NormalizedResidualAttention(latent_dim=self.latent_dim,
+    self.attn = NormalizedResidualAttention(latent_dim=self.latent_dim,
                                     attn_hds=self.attn_hds,
                                     key_dim=self.key_dim,
                                     use_bias=self.use_bias,
@@ -282,25 +282,7 @@ class DualTransBlock(ConfigLayer):
                                     bias_regularizer=self.bias_regularizer,
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
-    self.ffwd1 = NormalizedResidualFeedForward(latent_dim=self.latent_dim,
-                                    use_bias=self.use_bias,
-                                    kernel_initializer=self.kernel_initializer,
-                                    bias_initializer=self.bias_initializer,
-                                    kernel_regularizer=self.kernel_regularizer,
-                                    bias_regularizer=self.bias_regularizer,
-                                    kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint)
-    self.attn2 = NormalizedResidualAttention(latent_dim=self.latent_dim,
-                                    attn_hds=self.attn_hds,
-                                    key_dim=self.key_dim,
-                                    use_bias=self.use_bias,
-                                    kernel_initializer=self.kernel_initializer,
-                                    bias_initializer=self.bias_initializer,
-                                    kernel_regularizer=self.kernel_regularizer,
-                                    bias_regularizer=self.bias_regularizer,
-                                    kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint)
-    self.ffwd2 = NormalizedResidualFeedForward(latent_dim=self.latent_dim,
+    self.ffwd = NormalizedResidualFeedForward(latent_dim=self.latent_dim,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
                                     bias_initializer=self.bias_initializer,
@@ -311,16 +293,12 @@ class DualTransBlock(ConfigLayer):
     return
 
   def call(self, inputs):
-    # transformer 1
-    x = self.attn1(inputs)
-    x = self.ffwd1(x)
-    # transformer 2
-    x = self.attn2(x)
-    x = self.ffwd2(x)
+    x = self.attn(inputs)
+    x = self.ffwd(x)
     return x
 
   def get_config(self):
-    config = super(DualTransBlock, self).get_config()
+    config = super(TransBlock, self).get_config()
     config.update({
       'latent_dim' : self.latent_dim,
       'attn_hds'   : self.attn_hds,
@@ -329,14 +307,14 @@ class DualTransBlock(ConfigLayer):
     return config
 
 
-class DualTransUpsamplBlock(DualTransBlock):
+class TransUpsamplBlock(TransBlock):
   """
-  dual self-attention transformer blocks with average upsampling
+  self-attention transformer block with average upsampling
   """
   def __init__(self,
                *args,
                **kwargs):
-    super(DualTransUpsamplBlock, self).__init__(*args, **kwargs)
+    super(TransUpsamplBlock, self).__init__(*args, **kwargs)
     self.upspl = tf.keras.layers.UpSampling1D(size=2)
     self.avepl = tf.keras.layers.AveragePooling1D(pool_size=3,
                                                   strides=1,
@@ -344,7 +322,7 @@ class DualTransUpsamplBlock(DualTransBlock):
     return
 
   def call(self, inputs):
-    x = super(DualTransUpsamplBlock, self).call(inputs)
+    x = super(TransUpsamplBlock, self).call(inputs)
     # upsample
     x = self.upspl(x)
     x = self.avepl(x)
@@ -375,7 +353,7 @@ class Noisify(Layer):
     return inputs + a
 
 
-def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8, start_width=64):
+def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8, start_width=256):
   """
   construct generator using functional API
   """
@@ -387,11 +365,12 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8, start_width=64):
   latent_dim *= 2
   ## transformer->transformer->upsample blocks
   nblocks = (int(width).bit_length()) - (int(start_width).bit_length())
+  nblocks = 1
   for i in range(nblocks):
-    output = DualTransUpsamplBlock(latent_dim=latent_dim,
-                                   attn_hds=attn_hds,
-                                   key_dim=latent_dim,
-                                   name='utb_{}'.format(i))(output)
+    output = TransBlock(latent_dim=latent_dim,
+                        attn_hds=attn_hds,
+                        key_dim=latent_dim,
+                        name='utb_{}'.format(i))(output)
     output = Noisify(name='noi_{}'.format(i))(output)
   # map latent space to data space
   output = PointwiseLinMap(out_dim=1, name='plnmp')(output)

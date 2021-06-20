@@ -115,6 +115,12 @@ class CondGan1D(Model):
     mask = tf.reshape(mask, shape=tf.shape(dta))
     nois = tf.random.normal(shape=tf.shape(dta)) * mask
     dta  = dta + nois
+    ## obliterate random data entries
+    mask = tf.cast(tf.random.categorical(tf.math.log([[0.1, 0.9]]),
+                                         tf.math.reduce_prod(tf.shape(dta))),
+                                         tf.float32)
+    mask = tf.reshape(mask, shape=tf.shape(dta))
+    dta  = dta * mask
     return (dta,lbl)
 
   def pack(self, inputs):
