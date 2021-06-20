@@ -390,7 +390,7 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8, start_width=256):
   latent_dim *= 2
   ## transformer blocks
   nblocks = (int(width).bit_length()) - (int(start_width).bit_length())
-  nblocks = 2
+  nblocks = 4
   for i in range(nblocks):
     output = TransBlock(latent_dim=latent_dim,
                         attn_hds=attn_hds,
