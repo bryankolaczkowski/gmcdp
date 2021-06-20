@@ -72,7 +72,7 @@ class PackedInputMap(Layer):
     return config
 
 
-def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=8):
+def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=16, attn_hds=8):
   """
   construct a discriminator using functional API
   """

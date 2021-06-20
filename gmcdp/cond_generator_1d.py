@@ -378,7 +378,7 @@ class PointwiseLinNoisify(ConfigLayer):
     return inputs + a
 
 
-def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8, start_width=256):
+def CondGen1D(input_shape, width, latent_dim=16, attn_hds=8, start_width=256):
   """
   construct generator using functional API
   """
@@ -388,7 +388,7 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8, start_width=256):
                             dim=latent_dim,
                             name='linmp')(inputs)
   latent_dim *= 2
-  ## transformer->transformer->upsample blocks
+  ## transformer blocks
   nblocks = (int(width).bit_length()) - (int(start_width).bit_length())
   nblocks = 1
   for i in range(nblocks):
