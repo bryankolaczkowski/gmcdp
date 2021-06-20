@@ -113,6 +113,10 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=16, attn_hds=8):
   #                                          strides=2,
   #                                          padding='same',
   #                                          name='dnsmp1')(output)
+  output = TransBlock(latent_dim=latent_dim,
+                      attn_hds=attn_hds,
+                      key_dim=latent_dim,
+                      name='trblk2')(output)
   # decision layers
   output = tf.keras.layers.Flatten(name='outflt')(output)
   output = tf.keras.layers.Dense(units=1, name='output')(output)
