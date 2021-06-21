@@ -7,7 +7,7 @@ from tensorflow.keras.layers import Layer
 import tensorflow as tf
 
 from wrappers import SpecNorm
-from cond_generator_1d import PointwiseLinMap, TransBlock
+from cond_generator_1d import LayerNormLinMap, PointwiseLinMap, TransBlock
 
 
 class PackedInputMap(Layer):
