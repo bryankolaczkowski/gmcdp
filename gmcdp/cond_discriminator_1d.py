@@ -6,8 +6,8 @@ from tensorflow.keras import initializers, regularizers, constraints, Model
 from tensorflow.keras.layers import Layer
 import tensorflow as tf
 
-from wrappers import SpecNorm
-from cond_generator_1d import LayerNormLinMap, PointwiseLinMap, TransBlock
+from cond_generator_1d import ConfigLayer, LinMap, PointwiseLinMap, \
+                              EncoderBlock, DecoderBlock
 
 
 class PackedInputMap(Layer):
@@ -72,6 +72,52 @@ class PackedInputMap(Layer):
     return config
 
 
+
+
+
+class DisStart(ConfigLayer):
+  """
+  discriminator starting layer
+  """
+  def __init__(self, width, dim, *args, **kwargs):
+    super(DisStart, self).__init__(*args, **kwargs)
+    # config copy
+    self.width = width
+    self.dim   = dim
+    # constructor
+    self.dtamap = PointwiseLinMap(self.dim,
+                         use_bias=self.use_bias,
+                         kernel_initializer=self.kernel_initializer,
+                         bias_initializer=self.bias_initializer,
+                         kernel_regularizer=self.kernel_regularizer,
+                         bias_regularizer=self.bias_regularizer,
+                         kernel_constraint=self.kernel_constraint,
+                         bias_constraint=self.bias_constraint)
+    self.lblmap = LinMap(self.width,
+                         self.dim,
+                         use_bias=self.use_bias,
+                         kernel_initializer=self.kernel_initializer,
+                         bias_initializer=self.bias_initializer,
+                         kernel_regularizer=self.kernel_regularizer,
+                         bias_regularizer=self.bias_regularizer,
+                         kernel_constraint=self.kernel_constraint,
+                         bias_constraint=self.bias_constraint)
+    return
+
+  def call(self, inputs):
+    dta = self.dtamap(inputs[0])
+    lbl = self.lblmap(inputs[1])
+    return (dta,lbl)
+
+  def get_config(self):
+    config = super(GenStart, self).get_config()
+    config.update({
+      'width' : self.width,
+      'dim'   : self.dim,
+    })
+    return config
+
+
 def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=8):
   """
   construct a discriminator using functional API
@@ -79,15 +125,39 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=8):
   # calculate real data and label shapes from width * pack_dim
   dta_shap = (data_width,pack_dim,)
   lbl_shap = (label_width,pack_dim,)
+  # data and label inputs
+  dinput  = tf.keras.Input(shape=dta_shap, name='dta_in')
+  linput  = tf.keras.Input(shape=lbl_shap, name='lbl_in')
+  output = DisStart(data_width,
+                    latent_dim*pack_dim,
+                    name='disst')((dinput, linput))
+  # encoder blocks
+  nblocks = 4
+  for i in range(nblocks):
+    output = EncoderBlock(latent_dim=latent_dim*pack_dim,
+                          attn_hds=attn_hds,
+                          key_dim=latent_dim,
+                          name='enc{}'.format(i))(output)
+  # decoder blocks
+  nblocks = 4
+  for i in range(nblocks):
+    output = DecoderBlock(latent_dim=latent_dim*pack_dim,
+                          attn_hds=attn_hds,
+                          key_dim=latent_dim,
+                          name='dec{}'.format(i))(output)
+
+
+
+  """
   ## construct model
   # data input map
-  dinput  = tf.keras.Input(shape=dta_shap, name='dta_in')
+
   doutput = LayerNormLinMap(data_width, latent_dim, name='dtamap')(dinput)
   #doutput = PointwiseLinMap(latent_dim, name='dtamap')(dinput)
   #doutput = tf.keras.layers.LayerNormalization(axis=(-2,-1),
   #                                             name='dtanrm')(doutput)
   # label input map
-  linput  = tf.keras.Input(shape=lbl_shap, name='lbl_in')
+
   loutput = LayerNormLinMap(data_width, latent_dim, name='lblmap')(linput)
   #loutput = tf.keras.layers.LayerNormalization(axis=(-2,-1),
   #                                             name='lblnrm1')(loutput)
@@ -110,6 +180,10 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=8):
   output = tf.keras.layers.LeakyReLU()(output)
   output = tf.keras.layers.Dense(units=64)(output)
   output = tf.keras.layers.LeakyReLU()(output)
+  """
+
+  output = tf.keras.layers.Concatenate(name='conct')(output)
+  output = tf.keras.layers.Flatten(name='flt')(output)
   output = tf.keras.layers.Dense(units=1, name='output')(output)
   return Model(inputs=(dinput,linput), outputs=output)
 
@@ -134,7 +208,7 @@ if __name__ == '__main__':
   input_shape  = tf.shape(lbls)
   output_shape = tf.shape(data)
   gen = CondGen1D((input_shape[1],), output_shape[1])
-  gen.summary()
+  gen.summary(positions=[0.3, 0.75, 0.85, 1.0])
   out = gen(lbls)
   print(out)
 
@@ -153,6 +227,6 @@ if __name__ == '__main__':
 
   # create a little 'discriminator model'
   dis = CondDis1D(output_shape[1], input_shape[1], pack_dim=pack_dim)
-  dis.summary()
+  dis.summary(positions=[0.3, 0.75, 0.85, 1.0])
   out = dis((dta,lbl))
   print(out)
