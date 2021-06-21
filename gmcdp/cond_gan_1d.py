@@ -264,8 +264,8 @@ if __name__ == '__main__':
       return image
 
     def on_epoch_end(self, epoch, logs=None):
-      # generate 10 example datas
-      x = self.model((dtas[0:10],lbls[0:10]))[0]
+      # generate 20 example datas
+      x = self.model((dtas[0:20],lbls[0:20]))[0]
       fig = self.plot_data(x)
       img = self.plot_to_image(fig)
       with self.writer.as_default():
