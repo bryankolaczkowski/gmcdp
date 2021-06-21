@@ -374,7 +374,7 @@ class PointwiseLinNoisify(ConfigLayer):
 
   def call(self, inputs):
     x = self.map(inputs)
-    a = tf.random.normal(shape=tf.shape(inputs)) * (x + 1.0e-5)
+    a = tf.random.normal(shape=tf.shape(inputs), stdev=x+0.01)
     return inputs + a
 
 
