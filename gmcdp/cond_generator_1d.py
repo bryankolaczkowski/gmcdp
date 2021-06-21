@@ -358,9 +358,7 @@ class PointwiseLinNoisify(ConfigLayer):
   """
   def __init__(self, *args, **kwargs):
     super(PointwiseLinNoisify, self).__init__(*args, **kwargs)
-    self.alpha = self.add_weight(shape=(1,),
-                                 initializer='ones',
-                                 trainable=True)
+    self.flt = tf.keras.layers.Flatten()
     return
 
   def build(self, input_shape):
@@ -376,7 +374,7 @@ class PointwiseLinNoisify(ConfigLayer):
     return
 
   def call(self, inputs):
-    s  = self.map(inputs) + 0.01
+    s  = self.map(self.flt(inputs)) + 0.01
     s  = tf.reshape(s, shape=tf.shape(inputs))
     n  = tf.random.normal(shape=tf.shape(inputs)) * s
     return inputs + n
