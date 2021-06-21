@@ -401,7 +401,7 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8, start_width=256):
   # introduce noise
   output = PointwiseLinNoisify(name='noi_{}'.format(i))(output)
   # map latent space to data space
-  output = LinMap(data_width, 1, name='plnmp')(output)
+  output = LinMap(width, 1, name='plnmp')(output)
   output = tf.keras.layers.Flatten(name='dtout')(output)
   return Model(inputs=inputs, outputs=(output,inputs))
 
