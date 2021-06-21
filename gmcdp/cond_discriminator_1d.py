@@ -82,9 +82,10 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=8):
   ## construct model
   # data input map
   dinput  = tf.keras.Input(shape=dta_shap, name='dta_in')
-  doutput = PointwiseLinMap(latent_dim, name='dtamap')(dinput)
-  doutput = tf.keras.layers.LayerNormalization(axis=(-2,-1),
-                                               name='dtanrm')(doutput)
+  doutput = LayerNormLinMap(data_width, latent_dim, name='dtamap')(dinput)
+  #doutput = PointwiseLinMap(latent_dim, name='dtamap')(dinput)
+  #doutput = tf.keras.layers.LayerNormalization(axis=(-2,-1),
+  #                                             name='dtanrm')(doutput)
   # label input map
   linput  = tf.keras.Input(shape=lbl_shap, name='lbl_in')
   loutput = LayerNormLinMap(data_width, latent_dim, name='lblmap')(linput)
