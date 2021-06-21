@@ -359,7 +359,7 @@ class PointwiseLinNoisify(ConfigLayer):
   def __init__(self, *args, **kwargs):
     super(PointwiseLinNoisify, self).__init__(*args, **kwargs)
     self.alpha = self.add_weight(shape=(1,),
-                                 initializer='zeros',
+                                 initializer='ones',
                                  trainable=True)
     return
 
