@@ -215,11 +215,11 @@ if __name__ == '__main__':
   # create a little 'generator model' that maps the label vector
   # to data space
   gen = CondGen1D((lbl_shp[1],), dta_shp[1])
-  gen.summary()
+  gen.summary(positions=[0.3, 0.75, 0.85, 1.0])
 
   # create a little 'packed discriminator model'
   dis = CondDis1D(dta_shp[1], lbl_shp[1], pack_dim=pack_dim)
-  dis.summary()
+  dis.summary(positions=[0.3, 0.75, 0.85, 1.0])
 
   # package data into dataset
   data = tf.data.Dataset.from_tensor_slices((dtas, lbls))
@@ -248,8 +248,8 @@ if __name__ == '__main__':
       fig = plt.figure()
       ax  = fig.add_subplot(111)
       y   = data.numpy().transpose()
-      y.sort(axis=0)
-      y = np.flip(y, axis=0)
+      #y.sort(axis=0)
+      #y = np.flip(y, axis=0)
       ax.plot(x, y, 'o', markersize=2, alpha=0.5)
       ax.set_ylim([-5,+5])
       return fig

@@ -122,6 +122,8 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=8):
   """
   construct a discriminator using functional API
   """
+  nblocks = 2
+
   # calculate real data and label shapes from width * pack_dim
   dta_shap = (data_width,pack_dim,)
   lbl_shap = (label_width,pack_dim,)
@@ -132,14 +134,12 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=8):
                     latent_dim*pack_dim,
                     name='disst')((dinput, linput))
   # encoder blocks
-  nblocks = 4
   for i in range(nblocks):
     output = EncoderBlock(latent_dim=latent_dim*pack_dim,
                           attn_hds=attn_hds,
                           key_dim=latent_dim,
                           name='enc{}'.format(i))(output)
   # decoder blocks
-  nblocks = 4
   for i in range(nblocks):
     output = DecoderBlock(latent_dim=latent_dim*pack_dim,
                           attn_hds=attn_hds,

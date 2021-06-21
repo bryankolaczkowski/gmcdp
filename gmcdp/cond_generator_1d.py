@@ -560,17 +560,18 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8):
   """
   construct generator using functional API
   """
+  nblocks = 2
+
+  # label input
   inputs = tf.keras.Input(shape=input_shape, name='lblin')
   output = GenStart(width=width, dim=latent_dim, name='genst')(inputs)
   # encoder blocks
-  nblocks = 4
   for i in range(nblocks):
     output = EncoderBlock(latent_dim=latent_dim,
                           attn_hds=attn_hds,
                           key_dim=latent_dim,
                           name='enc{}'.format(i))(output)
   # decoder blocks
-  nblocks = 4
   for i in range(nblocks):
     output = DecoderBlock(latent_dim=latent_dim,
                           attn_hds=attn_hds,
