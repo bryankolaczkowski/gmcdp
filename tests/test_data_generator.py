@@ -105,4 +105,5 @@ def gen_dataset(ndata, ntaxa=256, plot=True):
   return (tf.convert_to_tensor(norm_data, dtype=tf.float32), all_lbls_oh)
 
 if __name__ == '__main__':
-  gen_dataset(8)
+  gen_dataset(20)
+

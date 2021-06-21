@@ -27,7 +27,7 @@ norm_col_means   = numpy.log(numpy.divide(sorted_col_means, geo_col_means))
 
 x = numpy.linspace(1,ntaxa,num=ntaxa)
 matplotlib.pyplot.plot(x, norm_col_means, 'bo')
-for i in range(10):
+for i in range(20):
   matplotlib.pyplot.plot(x, norm_data[i,:], 'ro', markersize=2)
 matplotlib.pyplot.show()
 

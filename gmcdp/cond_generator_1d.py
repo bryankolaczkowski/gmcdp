@@ -358,11 +358,13 @@ class PointwiseLinNoisify(ConfigLayer):
   """
   def __init__(self, *args, **kwargs):
     super(PointwiseLinNoisify, self).__init__(*args, **kwargs)
+    self.alpha = self.add_weight(shape=(1,),
+                                 initializer='zeros',
+                                 trainable=True)
     return
 
   def build(self, input_shape):
     self.map = tf.keras.layers.Dense(units=input_shape[-1],
-                                     activation=tf.keras.activations.relu,
                                      use_bias=self.use_bias,
                                      kernel_initializer=self.kernel_initializer,
                                      bias_initializer=self.bias_initializer,
@@ -373,9 +375,22 @@ class PointwiseLinNoisify(ConfigLayer):
     return
 
   def call(self, inputs):
-    x = self.map(inputs)
-    a = tf.random.normal(shape=tf.shape(inputs), stddev=x+0.01)
-    return inputs + a
+    """
+    close to Reimannian noise injection (RNI)
+    from https://arxiv.org/pdf/2006.05891.pdf
+    """
+    # calculate RNI parameters
+    mu1 = tf.math.reduce_sum(inputs, axis=-1, keepdims=True) # sum channels
+    mu  = tf.math.reduce_mean(mu1)                           # overall mean
+    s   = mu - mu1                                           # diff from mean
+    s   = s / tf.math.reduce_max(tf.math.abs(s))             # normalize
+    sd  = self.map(s)                                        # affine transform
+    sp  = self.alpha * sd + (1.0-self.alpha)                 # stabilize pt1
+    sig = sp / tf.math.reduce_euclidean_norm(sp)             # stabilize pt2
+    # calculate output
+    a = tf.random.normal(shape=tf.shape(inputs))      # unscaled noise
+    out = sig * inputs + sig * a                      # scale inputs and noise
+    return out
 
 
 def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8, start_width=256):
@@ -390,7 +405,7 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8, start_width=256):
   latent_dim *= 2
   ## transformer blocks
   nblocks = (int(width).bit_length()) - (int(start_width).bit_length())
-  nblocks = 4
+  nblocks = 2
   for i in range(nblocks):
     output = TransBlock(latent_dim=latent_dim,
                         attn_hds=attn_hds,
