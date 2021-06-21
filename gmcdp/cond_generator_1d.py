@@ -179,8 +179,8 @@ class DataSelfAttn(ConfigLayer):
                **kwargs):
     super(DataSelfAttn, self).__init__(*args, **kwargs)
     # config copy
-    self.attn_hds   = attn_hds
-    self.key_dim    = key_dim
+    self.attn_hds = attn_hds
+    self.key_dim  = key_dim
     # construct
     self.lnm = tf.keras.layers.LayerNormalization(axis=(-2,-1))
     self.mha = tf.keras.layers.MultiHeadAttention(num_heads=self.attn_hds,
@@ -203,8 +203,8 @@ class DataSelfAttn(ConfigLayer):
   def get_config(self):
     config = super(DataSelfAttn, self).get_config()
     config.update({
-      'attn_hds'   : self.attn_hds,
-      'key_dim'    : self.key_dim,
+      'attn_hds' : self.attn_hds,
+      'key_dim'  : self.key_dim,
     })
     return config
 
