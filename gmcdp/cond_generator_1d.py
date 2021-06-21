@@ -133,8 +133,16 @@ class GenStart(ConfigLayer):
                          bias_regularizer=self.bias_regularizer,
                          kernel_constraint=self.kernel_constraint,
                          bias_constraint=self.bias_constraint)
-    self.lblmap = LinMap(self.width,
-                         self.dim,
+    self.lblprj = LinMap(self.width,
+                         1,
+                         use_bias=self.use_bias,
+                         kernel_initializer=self.kernel_initializer,
+                         bias_initializer=self.bias_initializer,
+                         kernel_regularizer=self.kernel_regularizer,
+                         bias_regularizer=self.bias_regularizer,
+                         kernel_constraint=self.kernel_constraint,
+                         bias_constraint=self.bias_constraint)
+    self.lblmap = PointwiseLinMap(self.dim,
                          use_bias=self.use_bias,
                          kernel_initializer=self.kernel_initializer,
                          bias_initializer=self.bias_initializer,
@@ -149,18 +157,19 @@ class GenStart(ConfigLayer):
     """
     labels -> (data,labels); data and labels are (bs,width,dim)
     """
-    ## data path
-    bs  = tf.shape(inputs)[0]
     # position encoding
-    p   = tf.tile(self.pos, multiples=(bs,))
-    p   = tf.reshape(p, shape=(bs,self.width))
-    # random noise
-    z   = tf.random.normal(shape=(bs,self.width))
-    # map data
-    z   = tf.stack([p,z], axis=-1)
+    bs = tf.shape(inputs)[0]
+    p  = tf.tile(self.pos, multiples=(bs,))
+    p  = tf.reshape(p, shape=(bs,self.width))
+    # data path
+    z = tf.random.normal(shape=(bs,self.width))
+    z = tf.stack([p,z], axis=-1)
     dta = self.dtamap(z)
-    ## label path
-    lbl = self.lblmap(inputs)
+    # label path
+    lpr = self.lblprj(inputs)
+    lpr = tf.reshape(lpr, shape=(bs,self.width))
+    lpr = tf.stack([p,lpr], axis=-1)
+    lbl = self.lblmap(lpr)
     return (dta,lbl)
 
   def get_config(self):
