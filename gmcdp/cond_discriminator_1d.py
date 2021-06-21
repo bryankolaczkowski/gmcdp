@@ -87,12 +87,12 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=8):
                                                name='dtanrm')(doutput)
   # label input map
   linput  = tf.keras.Input(shape=lbl_shap, name='lbl_in')
-  loutput = PackedInputMap(data_width, name='lblmap')(linput)
-  loutput = tf.keras.layers.LayerNormalization(axis=(-2,-1),
-                                               name='lblnrm1')(loutput)
-  loutput = PointwiseLinMap(latent_dim, name='lblprj')(loutput)
-  loutput = tf.keras.layers.LayerNormalization(axis=(-2,-1),
-                                               name='lblnrm2')(loutput)
+  loutput = LayerNormLinMap(data_width, latent_dim, name='lblmap')(linput)
+  #loutput = tf.keras.layers.LayerNormalization(axis=(-2,-1),
+  #                                             name='lblnrm1')(loutput)
+  #loutput = PointwiseLinMap(latent_dim, name='lblprj')(loutput)
+  #loutput = tf.keras.layers.LayerNormalization(axis=(-2,-1),
+  #                                             name='lblnrm2')(loutput)
   # combine data and label maps
   output = tf.keras.layers.Concatenate(name='dtalbl')((doutput,loutput))
   latent_dim *= 2
@@ -105,9 +105,9 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=8):
                         name='trblk{}'.format(i))(output)
   # decision layers
   output = tf.keras.layers.Flatten(name='outflt')(output)
-  output = tf.keras.layers.Dense(units=128)(output)
+  output = tf.keras.layers.Dense(units=64)(output)
   output = tf.keras.layers.LeakyReLU()(output)
-  output = tf.keras.layers.Dense(units=128)(output)
+  output = tf.keras.layers.Dense(units=64)(output)
   output = tf.keras.layers.LeakyReLU()(output)
   output = tf.keras.layers.Dense(units=1, name='output')(output)
   return Model(inputs=(dinput,linput), outputs=output)
