@@ -365,6 +365,7 @@ class PointwiseLinNoisify(ConfigLayer):
 
   def build(self, input_shape):
     self.map = tf.keras.layers.Dense(units=input_shape[-1],
+                                     activation=tf.keras.activations.relu,
                                      use_bias=self.use_bias,
                                      kernel_initializer=self.kernel_initializer,
                                      bias_initializer=self.bias_initializer,
@@ -379,6 +380,8 @@ class PointwiseLinNoisify(ConfigLayer):
     close to Reimannian noise injection (RNI)
     from https://arxiv.org/pdf/2006.05891.pdf
     """
+
+    """
     # calculate RNI parameters
     mu1 = tf.math.reduce_sum(inputs, axis=-1, keepdims=True) # sum channels
     mu  = tf.math.reduce_mean(mu1)                           # overall mean
@@ -388,9 +391,11 @@ class PointwiseLinNoisify(ConfigLayer):
     sp  = self.alpha * sd + (1.0-self.alpha)                 # stabilize pt1
     sig = sp / tf.math.reduce_euclidean_norm(sp)             # stabilize pt2
     # calculate output
-    a = tf.random.normal(shape=tf.shape(inputs))      # unscaled noise
-    out = sig * inputs + sig * a                      # scale inputs and noise
-    return out
+    """
+
+    a = tf.random.normal(shape=tf.shape(inputs))
+    s = self.map(inputs) + 0.01
+    return inputs + a*s
 
 
 def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8, start_width=256):
