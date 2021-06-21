@@ -152,6 +152,7 @@ class GenStart(ConfigLayer):
     # data path
     bs  = tf.shape(inputs)[0]
     z   = tf.random.normal(shape=(bs,self.width//2))
+    z   = tf.sort(z, direction='DESCENDING')
     dta = self.dtamap(z)
     # label path
     lbl = self.lblmap(inputs)
