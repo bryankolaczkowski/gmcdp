@@ -571,11 +571,12 @@ class PointwiseLinNoisify(ConfigLayer):
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
-def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8):
+def CondGen1D(input_shape, width, latent_dim=8, attn_hds=4):
   """
   construct generator using functional API
   """
-  nblocks = 2
+  nblocks = 4
+  key_dim = latent_dim // 2
 
   # label input
   inputs = tf.keras.Input(shape=input_shape, name='lblin')
@@ -584,13 +585,13 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=8):
   for i in range(nblocks):
     output = EncoderBlock(latent_dim=latent_dim,
                           attn_hds=attn_hds,
-                          key_dim=latent_dim,
+                          key_dim=key_dim,
                           name='enc{}'.format(i))(output)
   # decoder blocks
   for i in range(nblocks):
     output = DecoderBlock(latent_dim=latent_dim,
                           attn_hds=attn_hds,
-                          key_dim=latent_dim,
+                          key_dim=key_dim,
                           name='dec{}'.format(i))(output)
 
   """

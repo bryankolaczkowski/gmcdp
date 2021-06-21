@@ -118,11 +118,12 @@ class DisStart(ConfigLayer):
     return config
 
 
-def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=8):
+def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
   """
   construct a discriminator using functional API
   """
   nblocks = 2
+  key_dim = latent_dim // 2
 
   # calculate real data and label shapes from width * pack_dim
   dta_shap = (data_width,pack_dim,)
@@ -137,13 +138,13 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=8):
   for i in range(nblocks):
     output = EncoderBlock(latent_dim=latent_dim*pack_dim,
                           attn_hds=attn_hds,
-                          key_dim=latent_dim,
+                          key_dim=key_dim,
                           name='enc{}'.format(i))(output)
   # decoder blocks
   for i in range(nblocks):
     output = DecoderBlock(latent_dim=latent_dim*pack_dim,
                           attn_hds=attn_hds,
-                          key_dim=latent_dim,
+                          key_dim=key_dim,
                           name='dec{}'.format(i))(output)
 
 
