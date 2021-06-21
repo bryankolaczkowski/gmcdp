@@ -142,7 +142,7 @@ class GenStart(ConfigLayer):
                          bias_regularizer=self.bias_regularizer,
                          kernel_constraint=self.kernel_constraint,
                          bias_constraint=self.bias_constraint)
-    self.pos = tf.linspace(-1.0, +1.0, self.width)
+    self.pos = tf.linspace(+1.0, -1.0, self.width)
     return
 
   def call(self, inputs):
