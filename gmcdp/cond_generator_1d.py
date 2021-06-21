@@ -125,8 +125,7 @@ class GenStart(ConfigLayer):
     self.width = width
     self.dim   = dim
     # constructor
-    self.dtamap = LinMap(self.width,
-                         self.dim,
+    self.dtamap = PointwiseLinMap(self.dim,
                          use_bias=self.use_bias,
                          kernel_initializer=self.kernel_initializer,
                          bias_initializer=self.bias_initializer,
@@ -151,9 +150,9 @@ class GenStart(ConfigLayer):
     """
     # data path
     bs  = tf.shape(inputs)[0]
-    z   = tf.random.normal(shape=(bs,self.width//2))
+    z   = tf.random.normal(shape=(bs,self.width))
     z   = tf.sort(z, direction='DESCENDING')
-    z   = tf.reshape(z, shape=(bs,self.width//2))
+    z   = tf.reshape(z, shape=(bs,self.width))
     dta = self.dtamap(z)
     # label path
     lbl = self.lblmap(inputs)
