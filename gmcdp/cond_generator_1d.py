@@ -142,19 +142,24 @@ class GenStart(ConfigLayer):
                          bias_regularizer=self.bias_regularizer,
                          kernel_constraint=self.kernel_constraint,
                          bias_constraint=self.bias_constraint)
+    self.pos = tf.linspace(-1.0, +1.0, self.width)
     return
 
   def call(self, inputs):
     """
     labels -> (data,labels); data and labels are (bs,width,dim)
     """
-    # data path
+    ## data path
     bs  = tf.shape(inputs)[0]
-    z   = tf.random.normal(shape=(bs,self.width,1))
-    z   = tf.sort(z, direction='DESCENDING')
-    z   = tf.reshape(z, shape=(bs,self.width,1))
+    # position encoding
+    p   = tf.tile(self.pos, multiples=(bs,))
+    p   = tf.reshape(p, shape=(bs,self.width))
+    # random noise
+    z   = tf.random.normal(shape=(bs,self.width))
+    # map data
+    z   = tf.stack([p,z], axis=-1)
     dta = self.dtamap(z)
-    # label path
+    ## label path
     lbl = self.lblmap(inputs)
     return (dta,lbl)
 
