@@ -121,7 +121,7 @@ class CondGan1D(Model):
                                          tf.float32)
     mask = tf.reshape(mask, shape=tf.shape(dta))
     dta  = dta * mask
-    return (dta,lbl)
+    return inputs
 
   def pack(self, inputs):
     """
