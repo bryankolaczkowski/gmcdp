@@ -8,7 +8,7 @@ import tensorflow as tf
 
 from cond_generator_1d import ConfigLayer, LinMap, PointwiseLinMap, \
                               EncoderBlock, DecoderBlock, LayerNormLinMap, \
-                              TransBlock, NormalizedResidualAttention
+                              TransBlock, NormalizedResidualAttention, TB
 
 
 class PackedInputMap(Layer):
@@ -128,6 +128,32 @@ class CmpDisIn(Layer):
     return inputs[1] - inputs[0]
 
 
+class DD(ConfigLayer):
+  def __init__(self, width, *args, **kwargs):
+    super(DD, self).__init__(*args, **kwargs)
+    self.width = width
+    self.flt    = tf.keras.layers.Flatten()
+    self.lblprj = LinMap(width=width,
+                        dim=1,
+                        use_bias=self.use_bias,
+                        kernel_initializer=self.kernel_initializer,
+                        bias_initializer=self.bias_initializer,
+                        kernel_regularizer=self.kernel_regularizer,
+                        bias_regularizer=self.bias_regularizer,
+                        kernel_constraint=self.kernel_constraint,
+                        bias_constraint=self.bias_constraint)
+    return
+
+  def call(self, inputs):
+    bs = tf.shape(inputs)[0]
+    q = inputs[0]
+    q = tf.reshape(q, shape=(bs,self.width,1))
+    v = inputs[1]
+    v = tf.reshape(v, shape=(bs,self.width,1))
+    k = self.lblprj(self.flt(inputs[2]))
+    return (q,k,v)
+
+
 def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
   """
   construct a discriminator using functional API
@@ -136,9 +162,8 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
   in1 = tf.keras.Input(shape=(data_width,), name='in1')
   in2 = tf.keras.Input(shape=(data_width,), name='in2')
   in3 = tf.keras.Input(shape=(label_width,), name='in3')
-  ot3 = tf.keras.layers.Flatten()(in3)
-  ot3 = tf.keras.layers.Dense(units=data_width)(ot3)
-  out = tf.keras.layers.Concatenate(name='cnct')((in1,in2,ot3))
+  out = DD(width=data_width)((in1,in2,in3))
+  out = TB(width=data_width)(out)
 
   """
   nblocks = 2
@@ -200,7 +225,7 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
   """
 
 
-  out = tf.keras.layers.Flatten()(out)
+  out = tf.keras.layers.Flatten()(out[0])
   out = tf.keras.layers.Dense(units=256)(out)
   out = tf.keras.layers.LeakyReLU()(out)
   out = tf.keras.layers.Dense(units=256)(out)
