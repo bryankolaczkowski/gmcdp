@@ -135,8 +135,7 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
 
   in1 = tf.keras.Input(shape=(data_width,), name='in1')
   in2 = tf.keras.Input(shape=(data_width,), name='in2')
-  out = CmpDisIn(name='cmp')((in1,in2))
-
+  out = tf.keras.layers.Concatenate(name='cnct')((in1,in2))
 
   """
   nblocks = 2
@@ -197,8 +196,7 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
   # decision layers
   """
 
-  #output = tf.keras.layers.Concatenate(name='conct')(output)
-  out = tf.keras.layers.Flatten(name='flt')(out)
+
   out = tf.keras.layers.Dense(units=256)(out)
   out = tf.keras.layers.LeakyReLU()(out)
   out = tf.keras.layers.Dense(units=256)(out)
@@ -207,6 +205,7 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
   out = tf.keras.layers.LeakyReLU()(out)
   out = tf.keras.layers.Dense(units=256)(out)
   out = tf.keras.layers.LeakyReLU()(out)
+  out = tf.keras.layers.Flatten()(out)
   out = tf.keras.layers.Dense(units=1, name='output')(out)
   return Model(inputs=(in1,in2), outputs=out)
 
