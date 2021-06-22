@@ -225,7 +225,7 @@ if __name__ == '__main__':
   gen.summary(positions=[0.3, 0.75, 0.85, 1.0])
 
   # create a little 'packed discriminator model'
-  dis = CondDis1D(dta_shp[1], lbl_shp[1], pack_dim=pack_dim)
+  dis = CondDis1D(dta_shp[1], lbl_shp[1])
   dis.summary(positions=[0.3, 0.75, 0.85, 1.0])
 
   # package data into dataset
