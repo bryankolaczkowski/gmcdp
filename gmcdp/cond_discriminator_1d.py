@@ -119,9 +119,25 @@ class DisStart(ConfigLayer):
     return config
 
 
+class CmpDisIn(Layer):
+  def __init__(self, *args, **kwargs):
+    super(CmpDisIn, self).__init__(*args, **kwargs)
+    return
+
+  def call(self, inputs):
+    return inputs[1] - inputs[0]
+
+
 def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
   """
   construct a discriminator using functional API
+  """
+
+  in1 = tf.keras.Input(shape=(data_width,), name='in1')
+  in2 = tf.keras.Input(shape=(data_width,), name='in2')
+  out = CmpDisIn(name='cmp')((in1,in2))
+
+
   """
   nblocks = 2
   key_dim = latent_dim // 2
@@ -132,6 +148,7 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
   # data and label inputs
   dinput  = tf.keras.Input(shape=dta_shap, name='dta_in')
   linput  = tf.keras.Input(shape=lbl_shap, name='lbl_in')
+  """
 
   """
   output = DisStart(data_width,
@@ -151,6 +168,7 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
                           name='dec{}'.format(i))(output)
   """
 
+  """
   ## construct model
   # data input map
 
@@ -177,11 +195,12 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
   #                      key_dim=latent_dim,
   #                      name='trblk{}'.format(i))(output)
   # decision layers
+  """
 
   #output = tf.keras.layers.Concatenate(name='conct')(output)
-  output = tf.keras.layers.Flatten(name='flt')(output)
-  output = tf.keras.layers.Dense(units=1, name='output')(output)
-  return Model(inputs=(dinput,linput), outputs=output)
+  out = tf.keras.layers.Flatten(name='flt')(out)
+  out = tf.keras.layers.Dense(units=1, name='output')(out)
+  return Model(inputs=(in1,in2), outputs=out)
 
 
 if __name__ == '__main__':

@@ -149,13 +149,17 @@ class CondGan1D(Model):
     bs = tf.shape(inputs[0])[0]
 
     # labels need to take into account discriminator's pack_dim
-    p_bs  = bs // self.pack_dim
-    pones =  tf.ones((p_bs,1))
-    nones = -tf.ones((p_bs,1))
+    #p_bs  = bs // self.pack_dim
+    pones =  tf.ones((bs,1))
+    nones = -tf.ones((bs,1))
+
+    data = inputs[0]
+    lbls = inputs[1]
 
     # train discriminator using real data
     with tf.GradientTape() as tape:
-      preds   = self.disr(self.pack(self.augment(inputs)))
+      #preds   = self.disr(self.pack(self.augment(inputs)))
+      preds   = self.disr((data, self.genr(lbls)[0]))
       disr_rl = self.compiled_loss(nones, preds)
     grds = tape.gradient(disr_rl, self.disr.trainable_weights)
     self.optimizer.apply_discriminator_gradients(zip(grds,
@@ -163,18 +167,20 @@ class CondGan1D(Model):
 
     # train discriminator and generator using fake data
     with tf.GradientTape() as tape:
-      fake_data = self.pack(self.augment(self.genr(inputs[1])))
-      preds     = self.disr(fake_data)
-      disr_fk   = self.compiled_loss(pones, preds)
+      #fake_data = self.pack(self.augment(self.genr(inputs[1])))
+      #preds     = self.disr(fake_data)
+      preds   = self.disr((self.genr(lbls)[0], self.genr(lbls)[0]))
+      disr_fk = self.compiled_loss(pones, preds)
     grds = tape.gradient(disr_fk, self.disr.trainable_weights)
     self.optimizer.apply_discriminator_gradients(zip(grds,
                                                  self.disr.trainable_weights))
 
     # train generator
     with tf.GradientTape() as tape:
-      fake_data = self.pack(self.augment(self.genr(inputs[1])))
+      #fake_data = self.pack(self.augment(self.genr(inputs[1])))
       # calculate discriminator-induced loss
-      preds     = self.disr(fake_data)
+      #preds     = self.disr(fake_data)
+      preds     = self.disr((self.genr(lbls)[0], self.genr(lbls)[0]))
       genr_loss = self.compiled_loss(nones, preds)
     grds = tape.gradient(genr_loss, self.genr.trainable_weights)
     self.optimizer.apply_generator_gradients(zip(grds,
@@ -182,8 +188,7 @@ class CondGan1D(Model):
 
     return {'disr_rl'   : disr_rl,
             'disr_fk'   : disr_fk,
-            'genr_loss' : genr_loss,
-           }
+            'genr_loss' : genr_loss,}
 
   def get_config(self):
     config = super(CondGan1D, self).get_config()
