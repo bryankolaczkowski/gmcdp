@@ -219,10 +219,10 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
 
   #out = tf.keras.layers.Concatenate()(out)
   out = tf.keras.layers.Flatten()(out[0])
-  #out = tf.keras.layers.Dense(units=256)(out)
-  #out = tf.keras.layers.LeakyReLU()(out)
-  #out = tf.keras.layers.Dense(units=256)(out)
-  #out = tf.keras.layers.LeakyReLU()(out)
+  out = tf.keras.layers.Dense(units=256)(out)
+  out = tf.keras.layers.LeakyReLU()(out)
+  out = tf.keras.layers.Dense(units=256)(out)
+  out = tf.keras.layers.LeakyReLU()(out)
   out = tf.keras.layers.Dense(units=1, name='output')(out)
   return Model(inputs=(in1,in2,in3), outputs=out)
 
