@@ -7,7 +7,8 @@ from tensorflow.keras.layers import Layer
 import tensorflow as tf
 
 from cond_generator_1d import ConfigLayer, LinMap, PointwiseLinMap, \
-                              EncoderBlock, DecoderBlock
+                              EncoderBlock, DecoderBlock, LayerNormLinMap, \
+                              TransBlock, NormalizedResidualAttention
 
 
 class PackedInputMap(Layer):
@@ -131,6 +132,8 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
   # data and label inputs
   dinput  = tf.keras.Input(shape=dta_shap, name='dta_in')
   linput  = tf.keras.Input(shape=lbl_shap, name='lbl_in')
+
+  """
   output = DisStart(data_width,
                     latent_dim*pack_dim,
                     name='disst')((dinput, linput))
@@ -146,10 +149,8 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
                           attn_hds=attn_hds,
                           key_dim=key_dim,
                           name='dec{}'.format(i))(output)
-
-
-
   """
+
   ## construct model
   # data input map
 
@@ -176,14 +177,8 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
                         key_dim=latent_dim,
                         name='trblk{}'.format(i))(output)
   # decision layers
-  output = tf.keras.layers.Flatten(name='outflt')(output)
-  output = tf.keras.layers.Dense(units=64)(output)
-  output = tf.keras.layers.LeakyReLU()(output)
-  output = tf.keras.layers.Dense(units=64)(output)
-  output = tf.keras.layers.LeakyReLU()(output)
-  """
 
-  output = tf.keras.layers.Concatenate(name='conct')(output)
+  #output = tf.keras.layers.Concatenate(name='conct')(output)
   output = tf.keras.layers.Flatten(name='flt')(output)
   output = tf.keras.layers.Dense(units=1, name='output')(output)
   return Model(inputs=(dinput,linput), outputs=output)

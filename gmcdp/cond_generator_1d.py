@@ -443,6 +443,69 @@ class StochasticLinMap(LayerNormLinMap):
     return out
 
 
+class NormalizedResidualAttention(ConfigLayer):
+  def __init__(self,
+               attn_hds,
+               key_dim,
+               *args,
+               **kwargs):
+    super(NormalizedResidualAttention, self).__init__(*args, **kwargs)
+    # config copy
+    self.attn_hds = attn_hds
+    self.key_dim  = key_dim
+    # construct
+    self.lnm = tf.keras.layers.LayerNormalization(axis=(-2,-1))
+    self.mha = tf.keras.layers.MultiHeadAttention(num_heads=self.attn_hds,
+                                    key_dim=self.key_dim,
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
+    return
+
+  def call(self, inputs):
+    x = self.lnm(inputs)
+    x = self.mha(x,x)
+    return inputs + x
+
+class NormalizedResidualFeedForward(ConfigLayer):
+  def __init__(self,
+               latent_dim,
+               *args,
+               **kwargs):
+    super(NormalizedResidualFeedForward, self).__init__(*args, **kwargs)
+    # config copy
+    self.latent_dim = latent_dim
+    # construct
+    self.lnm = tf.keras.layers.LayerNormalization(axis=(-2,-1))
+    self.ff1 = tf.keras.layers.Dense(units=self.latent_dim,
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
+    self.ff2 = tf.keras.layers.Dense(units=self.latent_dim,
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
+    return
+
+  def call(self, inputs):
+    x = self.lnm(inputs)
+    x = self.ff1(x)
+    x = tf.nn.leaky_relu(x)
+    x = self.ff2(x)
+    return inputs + x
+
 class TransBlock(ConfigLayer):
   """
   self-attention tranformer block with residual connections
@@ -459,8 +522,7 @@ class TransBlock(ConfigLayer):
     self.attn_hds   = attn_hds
     self.key_dim    = key_dim
     # construct
-    self.attn = NormalizedResidualAttention(latent_dim=self.latent_dim,
-                                    attn_hds=self.attn_hds,
+    self.attn = NormalizedResidualAttention(attn_hds=self.attn_hds,
                                     key_dim=self.key_dim,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
@@ -567,7 +629,31 @@ class PointwiseLinNoisify(ConfigLayer):
     n  = tf.random.normal(shape=tf.shape(inputs)) * s
     return inputs + n
 
+class TestMap(Layer):
+  def __init__(self, latent_dim, *args, **kwargs):
+    super(TestMap, self).__init__(*args, **kwargs)
+    self.latent_dim = latent_dim
+    self.flt = tf.keras.layers.Flatten()
+    self.d1  = tf.keras.layers.Dense(units=32)
+    self.d2  = tf.keras.layers.Dense(units=64)
+    self.d3  = tf.keras.layers.Dense(units=128)
+    self.d4  = tf.keras.layers.Dense(units=256)
+    self.d5  = tf.keras.layers.Dense(units=256*self.latent_dim)
+    return
 
+  def call(self, inputs):
+    x = self.flt(inputs)
+    x = self.d1(x)
+    x = tf.nn.leaky_relu(x)
+    x = self.d2(x)
+    x = tf.nn.leaky_relu(x)
+    x = self.d3(x)
+    x = tf.nn.leaky_relu(x)
+    x = self.d4(x)
+    x = tf.nn.leaky_relu(x)
+    x = self.d5(x)
+    x = tf.reshape(x, shape=(tf.shape(inputs)[0], 256, self.latent_dim))
+    return x
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
@@ -580,6 +666,12 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=4):
 
   # label input
   inputs = tf.keras.Input(shape=input_shape, name='lblin')
+  output = TestMap(latent_dim=latent_dim)(inputs)
+  output = tf.keras.layers.Dense(units=1)(output)
+  output = tf.keras.layers.Flatten()(output)
+
+
+  """
   output = GenStart(width=width, dim=latent_dim, name='genst')(inputs)
   # encoder blocks
   for i in range(nblocks):
@@ -593,6 +685,7 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=4):
                           attn_hds=attn_hds,
                           key_dim=key_dim,
                           name='dec{}'.format(i))(output)
+  """
 
   """
   # map input to latent space
@@ -615,8 +708,8 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=4):
   output = LinMap(width, 1, name='plnmp')(output)
   """
 
-  output = PointwiseLinMap(1, name='plnmp')(output[0])
-  output = tf.keras.layers.Flatten(name='dtout')(output)
+  #output = PointwiseLinMap(1, name='plnmp')(output[0])
+  #output = tf.keras.layers.Flatten(name='dtout')(output)
   return Model(inputs=inputs, outputs=(output,inputs))
 
 
