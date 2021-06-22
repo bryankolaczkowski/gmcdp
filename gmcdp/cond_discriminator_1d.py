@@ -145,7 +145,7 @@ class DD(ConfigLayer):
     return
 
   def call(self, inputs):
-    bs = tf.shape(inputs)[0]
+    bs = tf.shape(inputs[0])[0]
     q = inputs[0]
     q = tf.reshape(q, shape=(bs,self.width,1))
     v = inputs[1]
