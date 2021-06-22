@@ -765,9 +765,10 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=4):
 
   # label input
   inputs = tf.keras.Input(shape=input_shape, name='lblin')
-  output = MTB(width=width, name='dgen')(inputs)
-  output = TB(width=width, name='mha')(output)
-  output = tf.keras.layers.Flatten(name='fltn')(output[0])
+  output = LinGausSamp(width=width)(inputs)
+  #output = MTB(width=width, name='dgen')(inputs)
+  #output = TB(width=width, name='mha')(output)
+  output = tf.keras.layers.Flatten(name='fltn')(output)
 
 
   """
