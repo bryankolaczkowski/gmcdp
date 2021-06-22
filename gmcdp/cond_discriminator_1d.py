@@ -6,157 +6,59 @@ from tensorflow.keras import initializers, regularizers, constraints, Model
 from tensorflow.keras.layers import Layer
 import tensorflow as tf
 
-from cond_generator_1d import ConfigLayer, LinMap, PointwiseLinMap, \
-                              EncoderBlock, DecoderBlock, LayerNormLinMap, \
-                              TransBlock, NormalizedResidualAttention, TB
-
-
-class PackedInputMap(Layer):
-  """
-  independent linear map for packed input
-  """
-  def __init__(self,
-               width,
-               use_bias=True,
-               kernel_initializer='glorot_normal',
-               bias_initializer='zeros',
-               kernel_regularizer=None,
-               bias_regularizer=None,
-               kernel_constraint=None,
-               bias_constraint=None,
-               **kwargs):
-    super(PackedInputMap, self).__init__(**kwargs)
-    # config copy
-    self.width              = width
-    self.use_bias           = use_bias
-    self.kernel_initializer = initializers.get(kernel_initializer)
-    self.bias_initializer   = initializers.get(bias_initializer)
-    self.kernel_regularizer = regularizers.get(kernel_regularizer)
-    self.bias_regularizer   = regularizers.get(bias_regularizer)
-    self.kernel_constraint  = constraints.get(kernel_constraint)
-    self.bias_constraint    = constraints.get(bias_constraint)
-    # construct
-    self.mapl = tf.keras.layers.Dense(units=self.width,
-                                    use_bias=self.use_bias,
-                                    kernel_initializer=self.kernel_initializer,
-                                    bias_initializer=self.bias_initializer,
-                                    kernel_regularizer=self.kernel_regularizer,
-                                    bias_regularizer=self.bias_regularizer,
-                                    kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint)
-    return
-
-  def call(self, inputs):
-    """
-    maps data to latent space embedding (bs,width,latent_dim)
-    """
-    # transpose (bs,width,channels) to (bs,channels,width)
-    x = tf.transpose(inputs, perm=(0,2,1))
-    # independently map each channel's data using linear map
-    x = self.mapl(x)
-    # un-transpose (bs,channels,width) to (bs,width,channels)
-    x = tf.transpose(x, perm=(0,2,1))
-    return x
-
-  def get_config(self):
-    config = super(LabelDataMap, self).get_config()
-    config.update({
-      'width'              : self.width,
-      'use_bias'           : self.use_bias,
-      'kernel_initializer' : initializers.serialize(self.kernel_initializer),
-      'bias_initializer'   : initializers.serialize(self.bias_initializer),
-      'kernel_regularizer' : regularizers.serialize(self.kernel_regularizer),
-      'bias_regularizer'   : regularizers.serialize(self.bias_regularizer),
-      'kernel_constraint'  : constraints.serialize(self.kernel_constraint),
-      'bias_constraint'    : constraints.serialize(self.bias_constraint),
-    })
-    return config
-
-
-
+from cond_generator_1d import ConfigLayer, LinMap, TB
 
 
 class DisStart(ConfigLayer):
   """
-  discriminator starting layer
+  discriminator start - linear project labels to input data space
   """
-  def __init__(self, width, dim, *args, **kwargs):
+  def __init__(self, width, *args, **kwargs):
     super(DisStart, self).__init__(*args, **kwargs)
     # config copy
     self.width = width
-    self.dim   = dim
-    # constructor
-    self.dtamap = PointwiseLinMap(self.dim,
-                         use_bias=self.use_bias,
-                         kernel_initializer=self.kernel_initializer,
-                         bias_initializer=self.bias_initializer,
-                         kernel_regularizer=self.kernel_regularizer,
-                         bias_regularizer=self.bias_regularizer,
-                         kernel_constraint=self.kernel_constraint,
-                         bias_constraint=self.bias_constraint)
-    self.lblmap = LinMap(self.width,
-                         self.dim,
-                         use_bias=self.use_bias,
-                         kernel_initializer=self.kernel_initializer,
-                         bias_initializer=self.bias_initializer,
-                         kernel_regularizer=self.kernel_regularizer,
-                         bias_regularizer=self.bias_regularizer,
-                         kernel_constraint=self.kernel_constraint,
-                         bias_constraint=self.bias_constraint)
-    return
-
-  def call(self, inputs):
-    dta = self.dtamap(inputs[0])
-    lbl = self.lblmap(inputs[1])
-    return (dta,lbl)
-
-  def get_config(self):
-    config = super(GenStart, self).get_config()
-    config.update({
-      'width' : self.width,
-      'dim'   : self.dim,
-    })
-    return config
-
-
-
-
-class DD(ConfigLayer):
-  def __init__(self, width, *args, **kwargs):
-    super(DD, self).__init__(*args, **kwargs)
-    self.width  = width
+    # construct
     self.flt    = tf.keras.layers.Flatten()
     self.lblprj = LinMap(width=width,
-                        dim=1,
-                        use_bias=self.use_bias,
-                        kernel_initializer=self.kernel_initializer,
-                        bias_initializer=self.bias_initializer,
-                        kernel_regularizer=self.kernel_regularizer,
-                        bias_regularizer=self.bias_regularizer,
-                        kernel_constraint=self.kernel_constraint,
-                        bias_constraint=self.bias_constraint)
+                         dim=1,
+                         use_bias=self.use_bias,
+                         kernel_initializer=self.kernel_initializer,
+                         bias_initializer=self.bias_initializer,
+                         kernel_regularizer=self.kernel_regularizer,
+                         bias_regularizer=self.bias_regularizer,
+                         kernel_constraint=self.kernel_constraint,
+                         bias_constraint=self.bias_constraint)
     return
 
   def call(self, inputs):
     bs = tf.shape(inputs[0])[0]
+    # query
     q = inputs[0]
     q = tf.reshape(q, shape=(bs,self.width,1))
+    # value
     v = inputs[1]
     v = tf.reshape(v, shape=(bs,self.width,1))
+    # key
     k = self.lblprj(self.flt(inputs[2]))
     return (q,k,v)
 
+  def get_config(self):
+    config = super(DisStart, self).get_config()
+    config.update({
+      'width' : self.width,
+    })
+    return config
 
-def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
+
+def CondDis1D(data_width, label_width, attn_hds=8):
   """
   construct a discriminator using functional API
   """
-
-  in1 = tf.keras.Input(shape=(data_width,), name='in1')
-  in2 = tf.keras.Input(shape=(data_width,), name='in2')
+  in1 = tf.keras.Input(shape=(data_width,),  name='in1')
+  in2 = tf.keras.Input(shape=(data_width,),  name='in2')
   in3 = tf.keras.Input(shape=(label_width,), name='in3')
-  out = DD(width=data_width)((in1,in2,in3))
-  out = TB(width=data_width, heads=attn_hds)(out)
+  out = DisStart(width=data_width)((in1,in2,in3))
+  out = CrossMultHdAttn(width=data_width, heads=attn_hds)(out)
 
   """
   nblocks = 2
@@ -168,9 +70,7 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
   # data and label inputs
   dinput  = tf.keras.Input(shape=dta_shap, name='dta_in')
   linput  = tf.keras.Input(shape=lbl_shap, name='lbl_in')
-  """
 
-  """
   output = DisStart(data_width,
                     latent_dim*pack_dim,
                     name='disst')((dinput, linput))
@@ -186,9 +86,7 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
                           attn_hds=attn_hds,
                           key_dim=key_dim,
                           name='dec{}'.format(i))(output)
-  """
 
-  """
   ## construct model
   # data input map
 
@@ -217,7 +115,6 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
   # decision layers
   """
 
-  #out = tf.keras.layers.Concatenate()(out)
   out = tf.keras.layers.Flatten()(out[0])
   out = tf.keras.layers.Dense(units=256)(out)
   out = tf.keras.layers.LeakyReLU()(out)

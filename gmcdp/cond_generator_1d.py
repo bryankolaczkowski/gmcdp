@@ -115,71 +115,6 @@ class PointwiseLinMap(ConfigLayer):
 ## END LINEAR MAPS #############################################################
 
 
-class GenStart(ConfigLayer):
-  """
-  conditional generator starting layer
-  """
-  def __init__(self, width, dim, *args, **kwargs):
-    super(GenStart, self).__init__(*args, **kwargs)
-    # config copy
-    self.width = width
-    self.dim   = dim
-    # constructor
-    self.dtamap = PointwiseLinMap(self.dim,
-                         use_bias=self.use_bias,
-                         kernel_initializer=self.kernel_initializer,
-                         bias_initializer=self.bias_initializer,
-                         kernel_regularizer=self.kernel_regularizer,
-                         bias_regularizer=self.bias_regularizer,
-                         kernel_constraint=self.kernel_constraint,
-                         bias_constraint=self.bias_constraint)
-    self.lblprj = LinMap(self.width,
-                         1,
-                         use_bias=self.use_bias,
-                         kernel_initializer=self.kernel_initializer,
-                         bias_initializer=self.bias_initializer,
-                         kernel_regularizer=self.kernel_regularizer,
-                         bias_regularizer=self.bias_regularizer,
-                         kernel_constraint=self.kernel_constraint,
-                         bias_constraint=self.bias_constraint)
-    self.lblmap = PointwiseLinMap(self.dim,
-                         use_bias=self.use_bias,
-                         kernel_initializer=self.kernel_initializer,
-                         bias_initializer=self.bias_initializer,
-                         kernel_regularizer=self.kernel_regularizer,
-                         bias_regularizer=self.bias_regularizer,
-                         kernel_constraint=self.kernel_constraint,
-                         bias_constraint=self.bias_constraint)
-    self.pos = tf.linspace(+1.0, -1.0, self.width)
-    return
-
-  def call(self, inputs):
-    """
-    labels -> (data,labels); data and labels are (bs,width,dim)
-    """
-    # position encoding
-    bs = tf.shape(inputs)[0]
-    p  = tf.tile(self.pos, multiples=(bs,))
-    p  = tf.reshape(p, shape=(bs,self.width))
-    # data path
-    z = tf.random.normal(shape=(bs,self.width))
-    z = tf.stack([p,z], axis=-1)
-    dta = self.dtamap(z)
-    # label path
-    lpr = self.lblprj(inputs)
-    lpr = tf.reshape(lpr, shape=(bs,self.width))
-    lpr = tf.stack([p,lpr], axis=-1)
-    lbl = self.lblmap(lpr)
-    return (dta,lbl)
-
-  def get_config(self):
-    config = super(GenStart, self).get_config()
-    config.update({
-      'width' : self.width,
-      'dim'   : self.dim,
-    })
-    return config
-
 
 ### BEG TRANSFORMER CLASSES ####################################################
 
@@ -471,6 +406,7 @@ class NormalizedResidualAttention(ConfigLayer):
     x = self.mha(x,x)
     return inputs + x
 
+
 class NormalizedResidualFeedForward(ConfigLayer):
   def __init__(self,
                latent_dim,
@@ -629,31 +565,13 @@ class PointwiseLinNoisify(ConfigLayer):
     n  = tf.random.normal(shape=tf.shape(inputs)) * s
     return inputs + n
 
-class TestMap(Layer):
-  def __init__(self, latent_dim, *args, **kwargs):
-    super(TestMap, self).__init__(*args, **kwargs)
-    self.latent_dim = latent_dim
-    self.flt = tf.keras.layers.Flatten()
-    self.d1  = tf.keras.layers.Dense(units=32)
-    self.d2  = tf.keras.layers.Dense(units=64)
-    self.d3  = tf.keras.layers.Dense(units=128)
-    self.d4  = tf.keras.layers.Dense(units=256)
-    self.d5  = tf.keras.layers.Dense(units=256*self.latent_dim)
-    return
 
-  def call(self, inputs):
-    x = self.flt(inputs)
-    x = self.d1(x)
-    x = tf.nn.leaky_relu(x)
-    x = self.d2(x)
-    x = tf.nn.leaky_relu(x)
-    x = self.d3(x)
-    x = tf.nn.leaky_relu(x)
-    x = self.d4(x)
-    x = tf.nn.leaky_relu(x)
-    x = self.d5(x)
-    x = tf.reshape(x, shape=(tf.shape(inputs)[0], 256, self.latent_dim))
-    return x
+
+
+
+
+
+
 
 
 class LinGausSamp(ConfigLayer):
@@ -701,12 +619,14 @@ class LinGausSamp(ConfigLayer):
     })
     return config
 
-class MTB(ConfigLayer):
+
+class GenStart(ConfigLayer):
   def __init__(self, width, *args, **kwargs):
-    super(MTB, self).__init__(*args, **kwargs)
+    super(GenStart, self).__init__(*args, **kwargs)
+    # config copy
     self.width = width
-    self.query = LinMap(width=width,
-                        dim=1,
+    # constructor
+    self.query = LinGausSamp(width=width,
                         use_bias=self.use_bias,
                         kernel_initializer=self.kernel_initializer,
                         bias_initializer=self.bias_initializer,
@@ -723,7 +643,8 @@ class MTB(ConfigLayer):
                         bias_regularizer=self.bias_regularizer,
                         kernel_constraint=self.kernel_constraint,
                         bias_constraint=self.bias_constraint)
-    self.value = LinGausSamp(width=width,
+    self.value = LinMap(width=width,
+                        dim=1,
                         use_bias=self.use_bias,
                         kernel_initializer=self.kernel_initializer,
                         bias_initializer=self.bias_initializer,
@@ -739,12 +660,21 @@ class MTB(ConfigLayer):
     v = self.value(inputs)
     return (q,k,v)
 
+  def get_config(self):
+    config = super(GenStart, self).get_config()
+    config.update({
+      'width' : width,
+    })
+    return config
 
-class TB(ConfigLayer):
+
+class CrossMultHdAttn(ConfigLayer):
   def __init__(self, width, heads, *args, **kwargs):
-    super(TB, self).__init__(*args, **kwargs)
+    super(CrossMultHdAttn, self).__init__(*args, **kwargs)
+    # config copy
     self.width = width
     self.heads = heads
+    # construct
     self.mha = tf.keras.layers.MultiHeadAttention(num_heads=heads, key_dim=1)
     return
 
@@ -755,20 +685,25 @@ class TB(ConfigLayer):
     v = self.mha(q,v,k)
     return (q+v, k, v)
 
+  def get_config(self):
+    config = super(CrossMultHdAttn, self).get_config()
+    config.update({
+      'width' : width,
+      'heads' : heads,
+    })
+    return config
+
+
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
-def CondGen1D(input_shape, width, latent_dim=8, attn_hds=4):
+def CondGen1D(input_shape, width, attn_hds=8):
   """
   construct generator using functional API
   """
-  nblocks = 4
-  key_dim = latent_dim // 2
-
-  # label input
   inputs = tf.keras.Input(shape=input_shape, name='lblin')
-  output = LinGausSamp(width=width)(inputs)
-  output = tf.keras.layers.Flatten(name='fltn')(output)
-
+  output = GenStart(width=width)(inputs)
+  output = CrossMultHdAttn(width=width, heads=attn_hds)(output)
+  output = tf.keras.layers.Flatten(name='fltn')(output[0])
 
   """
   output = GenStart(width=width, dim=latent_dim, name='genst')(inputs)
@@ -784,9 +719,7 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=4):
                           attn_hds=attn_hds,
                           key_dim=key_dim,
                           name='dec{}'.format(i))(output)
-  """
 
-  """
   # map input to latent space
 
   output = StochasticLinMap(width=start_width,
@@ -807,8 +740,6 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=4):
   output = LinMap(width, 1, name='plnmp')(output)
   """
 
-  #output = PointwiseLinMap(1, name='plnmp')(output[0])
-  #output = tf.keras.layers.Flatten(name='dtout')(output)
   return Model(inputs=inputs, outputs=(output,inputs))
 
 
