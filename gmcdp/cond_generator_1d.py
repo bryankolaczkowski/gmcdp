@@ -689,10 +689,10 @@ class LinGausSamp(ConfigLayer):
     bs  = tf.shape(inputs)[0]
     x   = self.flat(inputs)
     m   = self.mean(x)
-    s   = self.stdv(x) * 0.1
-    d = tf.random.normal(shape=(bs,self.width), mean=m, stddev=s)
-    d = tf.reshape(d, shape=(bs,self.width,1))
-    return d
+    #s   = self.stdv(x) * 0.1
+    #d = tf.random.normal(shape=(bs,self.width), mean=m, stddev=s)
+    #d = tf.reshape(d, shape=(bs,self.width,1))
+    return tf.reshape(m, shape=(bs,self.width,1))
 
   def get_config(self):
     config = super(LinGausSamp, self).get_config()
