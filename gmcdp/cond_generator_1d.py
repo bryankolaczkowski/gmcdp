@@ -655,6 +655,51 @@ class TestMap(Layer):
     x = tf.reshape(x, shape=(tf.shape(inputs)[0], 256, self.latent_dim))
     return x
 
+
+class LinGausSamp(ConfigLayer):
+  """
+  independent linear projection of labels to mean, stdev; gaussian sampling
+  """
+  def __init__(self, width, *args, **kwargs):
+    super(LinGausSamp, self).__init__(*args, **kwargs)
+    # config copy
+    self.width = width
+    # construct
+    self.flat = tf.keras.layers.Flatten()
+    self.mean = tf.keras.layers.Dense(units=width,
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
+    self.stdv = tf.keras.layers.Dense(units=width,
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
+    return
+
+  def call(self, inputs):
+    bs  = tf.shape(inputs)[0]
+    x   = self.flat(inputs)
+    m   = self.mean(x)
+    s   = self.stdv(x)
+    d = tf.random.normal(shape=(bs,self.width), mean=m, stddev=s)
+    d = tf.reshape(d, shape=(bs,self.width,1))
+    return d
+
+  def get_config(self):
+    config = super(LinGausSamp, self).get_config()
+    config.update({
+      'width' : self.width,
+    })
+    return config
+
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
 def CondGen1D(input_shape, width, latent_dim=8, attn_hds=4):
@@ -666,8 +711,8 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=4):
 
   # label input
   inputs = tf.keras.Input(shape=input_shape, name='lblin')
-  output = tf.keras.layers.Dense(units=256)(inputs)
-  output = tf.keras.layers.Flatten()(output)
+  output = LinGausSamp(width=width, name='dgen')(inputs)
+  output = tf.keras.layers.Flatten(name='fltn')(output)
 
 
   """
