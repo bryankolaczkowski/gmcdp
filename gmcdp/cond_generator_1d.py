@@ -675,7 +675,7 @@ class LinGausSamp(ConfigLayer):
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
     self.stdv = tf.keras.layers.Dense(units=width,
-                                    activation=tf.keras.activations.relu,
+                                    activation=tf.keras.activations.sigmoid,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
                                     bias_initializer=self.bias_initializer,
@@ -689,7 +689,7 @@ class LinGausSamp(ConfigLayer):
     bs  = tf.shape(inputs)[0]
     x   = self.flat(inputs)
     m   = self.mean(x)
-    s   = self.stdv(x) + 0.01
+    s   = self.stdv(x)
     d = tf.random.normal(shape=(bs,self.width), mean=m, stddev=s)
     d = tf.reshape(d, shape=(bs,self.width,1))
     return d
@@ -741,10 +741,11 @@ class MTB(ConfigLayer):
 
 
 class TB(ConfigLayer):
-  def __init__(self, width, *args, **kwargs):
+  def __init__(self, width, heads, *args, **kwargs):
     super(TB, self).__init__(*args, **kwargs)
     self.width = width
-    self.mha = tf.keras.layers.MultiHeadAttention(num_heads=1, key_dim=1)
+    self.heads = heads
+    self.mha = tf.keras.layers.MultiHeadAttention(num_heads=heads, key_dim=1)
     return
 
   def call(self, inputs):
@@ -766,8 +767,6 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=4):
   # label input
   inputs = tf.keras.Input(shape=input_shape, name='lblin')
   output = LinGausSamp(width=width)(inputs)
-  #output = MTB(width=width, name='dgen')(inputs)
-  #output = TB(width=width, name='mha')(output)
   output = tf.keras.layers.Flatten(name='fltn')(output)
 
 

@@ -119,19 +119,12 @@ class DisStart(ConfigLayer):
     return config
 
 
-class CmpDisIn(Layer):
-  def __init__(self, *args, **kwargs):
-    super(CmpDisIn, self).__init__(*args, **kwargs)
-    return
-
-  def call(self, inputs):
-    return inputs[1] - inputs[0]
 
 
 class DD(ConfigLayer):
   def __init__(self, width, *args, **kwargs):
     super(DD, self).__init__(*args, **kwargs)
-    self.width = width
+    self.width  = width
     self.flt    = tf.keras.layers.Flatten()
     self.lblprj = LinMap(width=width,
                         dim=1,
@@ -163,7 +156,7 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
   in2 = tf.keras.Input(shape=(data_width,), name='in2')
   in3 = tf.keras.Input(shape=(label_width,), name='in3')
   out = DD(width=data_width)((in1,in2,in3))
-  out = TB(width=data_width)(out)
+  out = TB(width=data_width, heads=attn_hds)(out)
 
   """
   nblocks = 2
@@ -224,12 +217,12 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
   # decision layers
   """
 
-
+  #out = tf.keras.layers.Concatenate()(out)
   out = tf.keras.layers.Flatten()(out[0])
-  out = tf.keras.layers.Dense(units=256)(out)
-  out = tf.keras.layers.LeakyReLU()(out)
-  out = tf.keras.layers.Dense(units=256)(out)
-  out = tf.keras.layers.LeakyReLU()(out)
+  #out = tf.keras.layers.Dense(units=256)(out)
+  #out = tf.keras.layers.LeakyReLU()(out)
+  #out = tf.keras.layers.Dense(units=256)(out)
+  #out = tf.keras.layers.LeakyReLU()(out)
   out = tf.keras.layers.Dense(units=1, name='output')(out)
   return Model(inputs=(in1,in2,in3), outputs=out)
 
