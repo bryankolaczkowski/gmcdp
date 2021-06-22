@@ -689,10 +689,10 @@ class LinGausSamp(ConfigLayer):
     bs  = tf.shape(inputs)[0]
     x   = self.flat(inputs)
     m   = self.mean(x)
-    #s   = self.stdv(x) * 0.1
-    #d = tf.random.normal(shape=(bs,self.width), mean=m, stddev=s)
-    #d = tf.reshape(d, shape=(bs,self.width,1))
-    return tf.reshape(m, shape=(bs,self.width,1))
+    s   = self.stdv(x) + 0.01
+    d = tf.random.normal(shape=(bs,self.width), mean=m, stddev=s)
+    d = tf.reshape(d, shape=(bs,self.width,1))
+    return d
 
   def get_config(self):
     config = super(LinGausSamp, self).get_config()
@@ -700,6 +700,59 @@ class LinGausSamp(ConfigLayer):
       'width' : self.width,
     })
     return config
+
+class MTB(ConfigLayer):
+  def __init__(self, width, *args, **kwargs):
+    super(MTB, self).__init__(*args, **kwargs)
+    self.width = width
+    self.query = LinMap(width=width,
+                        dim=1,
+                        use_bias=self.use_bias,
+                        kernel_initializer=self.kernel_initializer,
+                        bias_initializer=self.bias_initializer,
+                        kernel_regularizer=self.kernel_regularizer,
+                        bias_regularizer=self.bias_regularizer,
+                        kernel_constraint=self.kernel_constraint,
+                        bias_constraint=self.bias_constraint)
+    self.key   = LinMap(width=width,
+                        dim=1,
+                        use_bias=self.use_bias,
+                        kernel_initializer=self.kernel_initializer,
+                        bias_initializer=self.bias_initializer,
+                        kernel_regularizer=self.kernel_regularizer,
+                        bias_regularizer=self.bias_regularizer,
+                        kernel_constraint=self.kernel_constraint,
+                        bias_constraint=self.bias_constraint)
+    self.value = LinGausSamp(width=width,
+                        use_bias=self.use_bias,
+                        kernel_initializer=self.kernel_initializer,
+                        bias_initializer=self.bias_initializer,
+                        kernel_regularizer=self.kernel_regularizer,
+                        bias_regularizer=self.bias_regularizer,
+                        kernel_constraint=self.kernel_constraint,
+                        bias_constraint=self.bias_constraint)
+    return
+
+  def call(self, inputs):
+    q = self.query(inputs)
+    k = self.key(inputs)
+    v = self.value(inputs)
+    return (q,k,v)
+
+
+class TB(ConfigLayer):
+  def __init__(self, width, *args, **kwargs):
+    super(TB, self).__init__(*args, **kwargs)
+    self.width = width
+    self.mha = tf.keras.layers.MultiHeadAttention(num_heads=1, key_dim=1)
+    return
+
+  def call(self, inputs):
+    q = inputs[0]
+    k = inputs[1]
+    v = inputs[2]
+    v = self.mha(q,v,k)
+    return (q+v, k, v)
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
@@ -712,8 +765,9 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=4):
 
   # label input
   inputs = tf.keras.Input(shape=input_shape, name='lblin')
-  output = LinGausSamp(width=width, name='dgen')(inputs)
-  output = tf.keras.layers.Flatten(name='fltn')(output)
+  output = MTB(width=width, name='dgen')(inputs)
+  output = TB(width=width, name='mha')(output)
+  output = tf.keras.layers.Flatten(name='fltn')(output[0])
 
 
   """
