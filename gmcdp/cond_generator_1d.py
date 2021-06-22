@@ -675,6 +675,7 @@ class LinGausSamp(ConfigLayer):
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
     self.stdv = tf.keras.layers.Dense(units=width,
+                                    activation=tf.keras.activations.relu,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
                                     bias_initializer=self.bias_initializer,
@@ -688,7 +689,7 @@ class LinGausSamp(ConfigLayer):
     bs  = tf.shape(inputs)[0]
     x   = self.flat(inputs)
     m   = self.mean(x)
-    s   = self.stdv(x)
+    s   = self.stdv(x) + 0.001
     d = tf.random.normal(shape=(bs,self.width), mean=m, stddev=s)
     d = tf.reshape(d, shape=(bs,self.width,1))
     return d
