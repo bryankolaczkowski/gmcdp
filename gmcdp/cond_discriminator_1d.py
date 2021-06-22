@@ -6,7 +6,7 @@ from tensorflow.keras import initializers, regularizers, constraints, Model
 from tensorflow.keras.layers import Layer
 import tensorflow as tf
 
-from cond_generator_1d import ConfigLayer, LinMap, TB
+from cond_generator_1d import ConfigLayer, LinMap, CrossMultHdAttn
 
 
 class DisStart(ConfigLayer):
