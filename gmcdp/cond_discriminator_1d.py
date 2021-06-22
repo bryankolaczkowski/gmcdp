@@ -154,13 +154,13 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
   ## construct model
   # data input map
 
-  doutput = LayerNormLinMap(data_width, latent_dim, name='dtamap')(dinput)
-  #doutput = PointwiseLinMap(latent_dim, name='dtamap')(dinput)
+  #doutput = LayerNormLinMap(data_width, latent_dim, name='dtamap')(dinput)
+  doutput = PointwiseLinMap(latent_dim, name='dtamap')(dinput)
   #doutput = tf.keras.layers.LayerNormalization(axis=(-2,-1),
   #                                             name='dtanrm')(doutput)
   # label input map
 
-  loutput = LayerNormLinMap(data_width, latent_dim, name='lblmap')(linput)
+  loutput = LinMap(data_width, latent_dim, name='lblmap')(linput)
   #loutput = tf.keras.layers.LayerNormalization(axis=(-2,-1),
   #                                             name='lblnrm1')(loutput)
   #loutput = PointwiseLinMap(latent_dim, name='lblprj')(loutput)
@@ -168,14 +168,14 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
   #                                             name='lblnrm2')(loutput)
   # combine data and label maps
   output = tf.keras.layers.Concatenate(name='dtalbl')((doutput,loutput))
-  latent_dim *= 2
+  #latent_dim *= 2
   # transformer blocks
-  nblocks = 2
-  for i in range(nblocks):
-    output = TransBlock(latent_dim=latent_dim,
-                        attn_hds=attn_hds,
-                        key_dim=latent_dim,
-                        name='trblk{}'.format(i))(output)
+  #nblocks = 2
+  #for i in range(nblocks):
+  #  output = TransBlock(latent_dim=latent_dim,
+  #                      attn_hds=attn_hds,
+  #                      key_dim=latent_dim,
+  #                      name='trblk{}'.format(i))(output)
   # decision layers
 
   #output = tf.keras.layers.Concatenate(name='conct')(output)

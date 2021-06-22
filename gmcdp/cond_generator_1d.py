@@ -666,8 +666,7 @@ def CondGen1D(input_shape, width, latent_dim=8, attn_hds=4):
 
   # label input
   inputs = tf.keras.Input(shape=input_shape, name='lblin')
-  output = TestMap(latent_dim=latent_dim)(inputs)
-  output = tf.keras.layers.Dense(units=1)(output)
+  output = tf.keras.layers.Dense(units=256)(inputs)
   output = tf.keras.layers.Flatten()(output)
 
 

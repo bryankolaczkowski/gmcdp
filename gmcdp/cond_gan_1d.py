@@ -204,7 +204,7 @@ if __name__ == '__main__':
   ndata     = 16344
   #ndata     = 262144
   batchsize = 128
-  pack_dim  = 4
+  pack_dim  = 1
 
   # generate simulated data and labels
   dtas,lbls = test_data_generator.gen_dataset(ndata, plot=False)
