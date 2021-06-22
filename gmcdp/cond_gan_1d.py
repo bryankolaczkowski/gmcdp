@@ -108,6 +108,7 @@ class CondGan1D(Model):
     """
     dta = inputs[0]
     lbl = inputs[1]
+    """
     ## noisify random data entries
     mask = tf.cast(tf.random.categorical(tf.math.log([[0.9, 0.1]]),
                                          tf.math.reduce_prod(tf.shape(dta))),
@@ -121,6 +122,7 @@ class CondGan1D(Model):
                                          tf.float32)
     mask = tf.reshape(mask, shape=tf.shape(dta))
     dta  = dta * mask
+    """
     return inputs
 
   def pack(self, inputs):
