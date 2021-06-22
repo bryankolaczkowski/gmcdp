@@ -135,7 +135,10 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
 
   in1 = tf.keras.Input(shape=(data_width,), name='in1')
   in2 = tf.keras.Input(shape=(data_width,), name='in2')
-  out = tf.keras.layers.Concatenate(name='cnct')((in1,in2))
+  in3 = tf.keras.Input(shape=(label_width,), name='in3')
+  ot3 = tf.keras.layers.Flatten()(in3)
+  ot3 = tf.keras.layers.Dense(units=data_width)(ot3)
+  out = tf.keras.layers.Concatenate(name='cnct')((in1,in2,ot3))
 
   """
   nblocks = 2
@@ -207,7 +210,7 @@ def CondDis1D(data_width, label_width, pack_dim=4, latent_dim=8, attn_hds=4):
   out = tf.keras.layers.LeakyReLU()(out)
   out = tf.keras.layers.Flatten()(out)
   out = tf.keras.layers.Dense(units=1, name='output')(out)
-  return Model(inputs=(in1,in2), outputs=out)
+  return Model(inputs=(in1,in2,in3), outputs=out)
 
 
 if __name__ == '__main__':

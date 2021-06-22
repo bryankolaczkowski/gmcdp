@@ -159,7 +159,7 @@ class CondGan1D(Model):
     # train discriminator using real data
     with tf.GradientTape() as tape:
       #preds   = self.disr(self.pack(self.augment(inputs)))
-      preds   = self.disr((data, self.genr(lbls)[0]))
+      preds   = self.disr((data, self.genr(lbls)[0], lbls))
       disr_rl = self.compiled_loss(nones, preds)
     grds = tape.gradient(disr_rl, self.disr.trainable_weights)
     self.optimizer.apply_discriminator_gradients(zip(grds,
@@ -169,7 +169,7 @@ class CondGan1D(Model):
     with tf.GradientTape() as tape:
       #fake_data = self.pack(self.augment(self.genr(inputs[1])))
       #preds     = self.disr(fake_data)
-      preds   = self.disr((self.genr(lbls)[0], self.genr(lbls)[0]))
+      preds   = self.disr((self.genr(lbls)[0], self.genr(lbls)[0], lbls))
       disr_fk = self.compiled_loss(pones, preds)
     grds = tape.gradient(disr_fk, self.disr.trainable_weights)
     self.optimizer.apply_discriminator_gradients(zip(grds,
@@ -180,7 +180,7 @@ class CondGan1D(Model):
       #fake_data = self.pack(self.augment(self.genr(inputs[1])))
       # calculate discriminator-induced loss
       #preds     = self.disr(fake_data)
-      preds     = self.disr((self.genr(lbls)[0], self.genr(lbls)[0]))
+      preds     = self.disr((self.genr(lbls)[0], self.genr(lbls)[0], lbls))
       genr_loss = self.compiled_loss(nones, preds)
     grds = tape.gradient(genr_loss, self.genr.trainable_weights)
     self.optimizer.apply_generator_gradients(zip(grds,
@@ -234,7 +234,7 @@ if __name__ == '__main__':
 
   # create optimizer
   gopt = tf.keras.optimizers.Nadam(learning_rate=1e-5, beta_1=0.5, beta_2=0.9)
-  dopt = tf.keras.optimizers.Nadam(learning_rate=1e-5, beta_1=0.5, beta_2=0.9)
+  dopt = tf.keras.optimizers.Nadam(learning_rate=1e-6, beta_1=0.5, beta_2=0.9)
   opt  = GanOptimizer(gopt, dopt)
 
   # create gan
