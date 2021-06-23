@@ -710,7 +710,7 @@ def CondGen1D(input_shape, width, attn_hds=8):
   #  output = tf.keras.layers.Dense(units=64,
   #                                 activation=tf.keras.activations.tanh)(output)
   # simple linear map
-  output = LinMap(width=width, dim=1)(output)
+  output = LinMap(width=width, dim=1)(inputs)
   output = tf.keras.layers.Flatten(name='fltn')(output)
 
   """
