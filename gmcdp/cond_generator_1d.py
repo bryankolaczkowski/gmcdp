@@ -703,7 +703,7 @@ def CondGen1D(input_shape, width, attn_hds=8):
   inputs = tf.keras.Input(shape=input_shape, name='lblin')
   # nonlinear label embedding
   output = tf.keras.layers.Flatten()(inputs)
-  for i in range(4)
+  for i in range(4):
     output = tf.keras.layers.Dense(units=64,
                                    activation=tf.keras.activations.tanh)(output)
   output = GenStart(width=width)(output)
