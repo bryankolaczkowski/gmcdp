@@ -19,27 +19,33 @@ class DisStart(ConfigLayer):
     self.width = width
     # construct
     self.flt    = tf.keras.layers.Flatten()
-    self.lblprj = LinMap(width=width,
-                         dim=1,
-                         use_bias=self.use_bias,
-                         kernel_initializer=self.kernel_initializer,
-                         bias_initializer=self.bias_initializer,
-                         kernel_regularizer=self.kernel_regularizer,
-                         bias_regularizer=self.bias_regularizer,
-                         kernel_constraint=self.kernel_constraint,
-                         bias_constraint=self.bias_constraint)
+    self.lblprj = tf.keras.layers.Dense(units=width,
+                                  use_bias=self.use_bias,
+                                  kernel_initializer=self.kernel_initializer,
+                                  bias_initializer=self.bias_initializer,
+                                  kernel_regularizer=self.kernel_regularizer,
+                                  bias_regularizer=self.bias_regularizer,
+                                  kernel_constraint=self.kernel_constraint,
+                                  bias_constraint=self.bias_constraint)
+    self.pos = tf.reshape(tf.linspace(-1.0, +1.0, self.width),
+                          shape=(1,self.width))
     return
 
   def call(self, inputs):
     bs = tf.shape(inputs[0])[0]
+    # calculate positional encoding
+    pe = tf.tile(self.pos, multiples=(bs,1))
     # query
     q = inputs[0]
-    q = tf.reshape(q, shape=(bs,self.width,1))
+    #q = tf.reshape(q, shape=(bs,self.width,1))
+    q = tf.stack((pe,q), axis=-1)
     # value
     v = inputs[1]
-    v = tf.reshape(v, shape=(bs,self.width,1))
+    #v = tf.reshape(v, shape=(bs,self.width,1))
+    v = tf.stack((pe,v), axis=-1)
     # key
     k = self.lblprj(self.flt(inputs[2]))
+    k = tf.stack((pe,k), axis=-1)
     return (q,k,v)
 
   def get_config(self):
@@ -48,6 +54,21 @@ class DisStart(ConfigLayer):
       'width' : self.width,
     })
     return config
+
+
+class StripPosition(Layer):
+  """
+  removes positional encoding from tensors
+  """
+  def __init__(self, *args, **kwargs):
+    super(StripPosition, self).__init__(*args, **kwargs)
+    return
+
+  def call(self, inputs):
+    p,q = tf.unstack(inputs[0], axis=-1)
+    p,k = tf.unstack(inputs[1], axis=-1)
+    p,v = tf.unstack(inputs[2], axis=-1)
+    return (q,k,v)
 
 
 def CondDis1D(data_width, label_width, attn_hds=8):
@@ -59,6 +80,7 @@ def CondDis1D(data_width, label_width, attn_hds=8):
   in3 = tf.keras.Input(shape=(label_width,), name='in3')
   out = DisStart(width=data_width)((in1,in2,in3))
   out = CrossMultHdAttn(width=data_width, heads=attn_hds)(out)
+  out = StripPosition()(out)
 
   """
   nblocks = 2
@@ -115,8 +137,7 @@ def CondDis1D(data_width, label_width, attn_hds=8):
   # decision layers
   """
 
-  out = tf.keras.layers.Flatten()(out[0])
-  out = tf.keras.layers.Dense(units=256)(out)
+  out = tf.keras.layers.Dense(units=256)(out[0])
   out = tf.keras.layers.LeakyReLU()(out)
   out = tf.keras.layers.Dense(units=256)(out)
   out = tf.keras.layers.LeakyReLU()(out)
@@ -144,10 +165,11 @@ if __name__ == '__main__':
   input_shape  = tf.shape(lbls)
   output_shape = tf.shape(data)
   gen = CondGen1D((input_shape[1],), output_shape[1])
-  gen.summary(positions=[0.3, 0.75, 0.85, 1.0])
+  gen.summary(line_length=120, positions=[0.3, 0.75, 0.85, 1.0])
   out = gen(lbls)
   print(out)
 
+  """
   # convert generator output to 'packed' discriminator
   pack_dim = 4
   ## pack data
@@ -160,9 +182,10 @@ if __name__ == '__main__':
   lbl = out[1] # label shape is (bs, labels)
   lwd = tf.shape(lbl)[1]
   lbl = tf.reshape(lbl, shape=(bs,lwd,-1))
+  """
 
   # create a little 'discriminator model'
-  dis = CondDis1D(output_shape[1], input_shape[1], pack_dim=pack_dim)
-  dis.summary(positions=[0.3, 0.75, 0.85, 1.0])
-  out = dis((dta,lbl))
+  dis = CondDis1D(output_shape[1], input_shape[1])
+  dis.summary(line_length=120, positions=[0.3, 0.75, 0.85, 1.0])
+  out = dis((out[0],out[0],out[1]))
   print(out)

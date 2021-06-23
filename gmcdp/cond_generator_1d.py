@@ -675,15 +675,17 @@ class CrossMultHdAttn(ConfigLayer):
     self.width = width
     self.heads = heads
     # construct
-    self.mha = tf.keras.layers.MultiHeadAttention(num_heads=heads, key_dim=1)
+    self.mha = tf.keras.layers.MultiHeadAttention(num_heads=heads, key_dim=2)
+    self.msk = tf.stack((tf.zeros(shape=(1,self.width)),
+                         tf.ones(shape=(1,self.width))), axis=-1)
     return
 
   def call(self, inputs):
     q = inputs[0]
     k = inputs[1]
     v = inputs[2]
-    v = self.mha(q,v,k)
-    return (q+v, k, v)
+    r = self.mha(q,v,k) * self.msk # mask out 'position' from r
+    return (q+r, k, v)
 
   def get_config(self):
     config = super(CrossMultHdAttn, self).get_config()
@@ -692,6 +694,7 @@ class CrossMultHdAttn(ConfigLayer):
       'heads' : heads,
     })
     return config
+
 
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
