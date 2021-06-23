@@ -701,7 +701,12 @@ def CondGen1D(input_shape, width, attn_hds=8):
   construct generator using functional API
   """
   inputs = tf.keras.Input(shape=input_shape, name='lblin')
-  output = GenStart(width=width)(inputs)
+  # nonlinear label embedding
+  output = tf.keras.layers.Flatten()(inputs)
+  for i in range(4)
+    output = tf.keras.layers.Dense(units=64,
+                                   activation=tf.keras.activations.tanh)(output)
+  output = GenStart(width=width)(output)
   output = CrossMultHdAttn(width=width, heads=attn_hds)(output)
   output = tf.keras.layers.Flatten(name='fltn')(output[0])
 
