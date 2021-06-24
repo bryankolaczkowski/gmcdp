@@ -255,8 +255,8 @@ if __name__ == '__main__':
       fig = plt.figure()
       ax  = fig.add_subplot(111)
       y   = data.numpy().transpose()
-      y.sort(axis=0)
-      y = np.flip(y, axis=0)
+      #y.sort(axis=0)
+      #y = np.flip(y, axis=0)
       ax.plot(x, y, 'o', markersize=2, alpha=0.5)
       ax.set_ylim([-5,+5])
       return fig

@@ -695,7 +695,19 @@ class CrossMultHdAttn(ConfigLayer):
     })
     return config
 
+class Const(Layer):
+  def __init__(self, width):
+    super(Const, self).__init__()
+    self.width = width
+    self.wts = self.add_weight(shape=(1,self.width,),
+                               initializer='zeros',
+                               trainable=True)
 
+  def call(self, inputs):
+    bs = tf.shape(inputs)[0]
+    x = tf.convert_to_tensor(self.wts)
+    x = tf.tile(x, multiples=(bs,1))
+    return x
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
@@ -712,8 +724,14 @@ def CondGen1D(input_shape, width, attn_hds=8):
   #for i in range(2):
   #  output = tf.keras.layers.Dense(units=64,
   #                                 activation=tf.keras.activations.tanh)(output)
+
+
   # simple linear map
-  output = LinMap(width=width, dim=1)(inputs)
+  #output = LinMap(width=width, dim=1)(inputs)
+  # linear gaussian sampling
+  #output = LinGausSamp(width=width)(inputs)
+  # constant map
+  output = Const(width=width)(inputs)
   output = tf.keras.layers.Flatten(name='fltn')(output)
 
   """
