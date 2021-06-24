@@ -695,12 +695,13 @@ class CrossMultHdAttn(ConfigLayer):
     })
     return config
 
+
 class Const(Layer):
   def __init__(self, width):
     super(Const, self).__init__()
     self.width = width
     self.wts = self.add_weight(shape=(1,self.width,),
-                               initializer='zeros',
+                               initializer='glorot_normal',
                                trainable=True)
 
   def call(self, inputs):
@@ -708,6 +709,7 @@ class Const(Layer):
     x = tf.convert_to_tensor(self.wts)
     x = tf.tile(x, multiples=(bs,1))
     return x
+
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
