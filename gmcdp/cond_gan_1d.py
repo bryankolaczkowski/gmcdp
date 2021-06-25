@@ -222,11 +222,11 @@ if __name__ == '__main__':
   # create a little 'generator model' that maps the label vector
   # to data space
   gen = CondGen1D((lbl_shp[1],), dta_shp[1])
-  gen.summary(line_length=120, positions=[0.3, 0.75, 0.85, 1.0])
+  gen.summary(positions=[0.4, 0.7, 0.8, 1.0])
 
   # create a little 'packed discriminator model'
   dis = CondDis1D(dta_shp[1], lbl_shp[1])
-  dis.summary(line_length=120, positions=[0.3, 0.75, 0.85, 1.0])
+  dis.summary(positions=[0.4, 0.7, 0.8, 1.0])
 
   # package data into dataset
   data = tf.data.Dataset.from_tensor_slices((dtas, lbls))

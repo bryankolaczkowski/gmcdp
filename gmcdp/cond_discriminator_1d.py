@@ -6,20 +6,54 @@ from tensorflow.keras import initializers, regularizers, constraints, Model
 from tensorflow.keras.layers import Layer
 import tensorflow as tf
 
-from cond_generator_1d import ConfigLayer, LinMap, CrossMultHdAttn
+from cond_generator_1d import EncodeLayer, WidthLayer, PosMaskedMHABlock
 
 
-class DisStart(ConfigLayer):
+class EncodeDis(EncodeLayer):
   """
-  discriminator start - linear project labels to input data space
+  encodes data for discriminator
   """
-  def __init__(self, width, *args, **kwargs):
-    super(DisStart, self).__init__(*args, **kwargs)
-    # config copy
-    self.width = width
+  def __init__(self, *args, **kwargs):
+    super(EncodeDis, self).__init__(*args, **kwargs)
+    return
+
+  def call(self, inputs):
+    dt1 = inputs[0]
+    dt2 = inputs[1]
+    lbl = inputs[2]
+    bs  = tf.shape(lbl)[0]
+    pse = tf.tile(self.pos, multiples=(bs,1))   # sequence position encoding
+    lpl = self.lpr(self.flt(lbl))               # linear project labels
+    return tf.stack((pse, dt1, dt2, lpl), axis=-1)
+
+
+class DecodeDis(WidthLayer):
+  """
+  decodes discriminator output to score
+  """
+  def __init__(self, *args, **kwargs):
+    super(DecodeDis, self).__init__(*args, **kwargs)
     # construct
-    self.flt    = tf.keras.layers.Flatten()
-    self.lblprj = tf.keras.layers.Dense(units=width,
+    self.flt = tf.keras.layers.Flatten()
+    self.dn1 = tf.keras.layers.Dense(units=self.width,
+                                  use_bias=self.use_bias,
+                                  activation=tf.keras.activations.tanh,
+                                  kernel_initializer=self.kernel_initializer,
+                                  bias_initializer=self.bias_initializer,
+                                  kernel_regularizer=self.kernel_regularizer,
+                                  bias_regularizer=self.bias_regularizer,
+                                  kernel_constraint=self.kernel_constraint,
+                                  bias_constraint=self.bias_constraint)
+    self.dn2 = tf.keras.layers.Dense(units=self.width,
+                                  use_bias=self.use_bias,
+                                  activation=tf.keras.activations.tanh,
+                                  kernel_initializer=self.kernel_initializer,
+                                  bias_initializer=self.bias_initializer,
+                                  kernel_regularizer=self.kernel_regularizer,
+                                  bias_regularizer=self.bias_regularizer,
+                                  kernel_constraint=self.kernel_constraint,
+                                  bias_constraint=self.bias_constraint)
+    self.out = tf.keras.layers.Dense(units=1,
                                   use_bias=self.use_bias,
                                   kernel_initializer=self.kernel_initializer,
                                   bias_initializer=self.bias_initializer,
@@ -27,121 +61,29 @@ class DisStart(ConfigLayer):
                                   bias_regularizer=self.bias_regularizer,
                                   kernel_constraint=self.kernel_constraint,
                                   bias_constraint=self.bias_constraint)
-    self.pos = tf.reshape(tf.linspace(-1.0, +1.0, self.width),
-                          shape=(1,self.width))
+
     return
 
   def call(self, inputs):
-    bs = tf.shape(inputs[0])[0]
-    # calculate positional encoding
-    pe = tf.tile(self.pos, multiples=(bs,1))
-    # query
-    q = inputs[0]
-    #q = tf.reshape(q, shape=(bs,self.width,1))
-    q = tf.stack((pe,q), axis=-1)
-    # value
-    v = inputs[1]
-    #v = tf.reshape(v, shape=(bs,self.width,1))
-    v = tf.stack((pe,v), axis=-1)
-    # key
-    k = self.lblprj(self.flt(inputs[2]))
-    k = tf.stack((pe,k), axis=-1)
-    return (q,k,v)
-
-  def get_config(self):
-    config = super(DisStart, self).get_config()
-    config.update({
-      'width' : self.width,
-    })
-    return config
+    x = self.flt(inputs)
+    x = self.dn1(x)
+    x = self.dn2(x)
+    return self.out(x)
 
 
-class StripPosition(Layer):
-  """
-  removes positional encoding from tensors
-  """
-  def __init__(self, *args, **kwargs):
-    super(StripPosition, self).__init__(*args, **kwargs)
-    return
-
-  def call(self, inputs):
-    p,q = tf.unstack(inputs[0], axis=-1)
-    p,k = tf.unstack(inputs[1], axis=-1)
-    p,v = tf.unstack(inputs[2], axis=-1)
-    return (q,k,v)
-
-
-def CondDis1D(data_width, label_width, attn_hds=8):
+def CondDis1D(data_width, label_width, attn_hds=4):
   """
   construct a discriminator using functional API
   """
   in1 = tf.keras.Input(shape=(data_width,),  name='in1')
   in2 = tf.keras.Input(shape=(data_width,),  name='in2')
   in3 = tf.keras.Input(shape=(label_width,), name='in3')
-  out = DisStart(width=data_width)((in1,in2,in3))
-  out = CrossMultHdAttn(width=data_width, heads=attn_hds)(out)
-  out = StripPosition()(out)
-
-  """
-  nblocks = 2
-  key_dim = latent_dim // 2
-
-  # calculate real data and label shapes from width * pack_dim
-  dta_shap = (data_width,pack_dim,)
-  lbl_shap = (label_width,pack_dim,)
-  # data and label inputs
-  dinput  = tf.keras.Input(shape=dta_shap, name='dta_in')
-  linput  = tf.keras.Input(shape=lbl_shap, name='lbl_in')
-
-  output = DisStart(data_width,
-                    latent_dim*pack_dim,
-                    name='disst')((dinput, linput))
-  # encoder blocks
-  for i in range(nblocks):
-    output = EncoderBlock(latent_dim=latent_dim*pack_dim,
-                          attn_hds=attn_hds,
-                          key_dim=key_dim,
-                          name='enc{}'.format(i))(output)
-  # decoder blocks
-  for i in range(nblocks):
-    output = DecoderBlock(latent_dim=latent_dim*pack_dim,
-                          attn_hds=attn_hds,
-                          key_dim=key_dim,
-                          name='dec{}'.format(i))(output)
-
-  ## construct model
-  # data input map
-
-  #doutput = LayerNormLinMap(data_width, latent_dim, name='dtamap')(dinput)
-  doutput = PointwiseLinMap(latent_dim, name='dtamap')(dinput)
-  #doutput = tf.keras.layers.LayerNormalization(axis=(-2,-1),
-  #                                             name='dtanrm')(doutput)
-  # label input map
-
-  loutput = LinMap(data_width, latent_dim, name='lblmap')(linput)
-  #loutput = tf.keras.layers.LayerNormalization(axis=(-2,-1),
-  #                                             name='lblnrm1')(loutput)
-  #loutput = PointwiseLinMap(latent_dim, name='lblprj')(loutput)
-  #loutput = tf.keras.layers.LayerNormalization(axis=(-2,-1),
-  #                                             name='lblnrm2')(loutput)
-  # combine data and label maps
-  output = tf.keras.layers.Concatenate(name='dtalbl')((doutput,loutput))
-  #latent_dim *= 2
-  # transformer blocks
-  #nblocks = 2
-  #for i in range(nblocks):
-  #  output = TransBlock(latent_dim=latent_dim,
-  #                      attn_hds=attn_hds,
-  #                      key_dim=latent_dim,
-  #                      name='trblk{}'.format(i))(output)
-  # decision layers
-  """
-
-  out = tf.keras.layers.Dense(units=256)(out[0])
-  out = tf.keras.layers.LeakyReLU()(out)
-  out = tf.keras.layers.Dense(units=256)(out)
-  out = tf.keras.layers.LeakyReLU()(out)
-  out = tf.keras.layers.Dense(units=1, name='output')(out)
+  out = EncodeDis(width=data_width, name='enc')((in1,in2,in3))
+  out = PosMaskedMHABlock(width=data_width,
+                          dim=4,
+                          heads=attn_hds,
+                          name='ma1')(out)
+  out = DecodeDis(width=data_width, name='dec')(out)
   return Model(inputs=(in1,in2,in3), outputs=out)
 
 
@@ -165,7 +107,7 @@ if __name__ == '__main__':
   input_shape  = tf.shape(lbls)
   output_shape = tf.shape(data)
   gen = CondGen1D((input_shape[1],), output_shape[1])
-  gen.summary(line_length=120, positions=[0.3, 0.75, 0.85, 1.0])
+  gen.summary(positions=[0.4, 0.7, 0.8, 1.0])
   out = gen(lbls)
   print(out)
 
@@ -186,6 +128,6 @@ if __name__ == '__main__':
 
   # create a little 'discriminator model'
   dis = CondDis1D(output_shape[1], input_shape[1])
-  dis.summary(line_length=120, positions=[0.3, 0.75, 0.85, 1.0])
+  dis.summary(positions=[0.4, 0.7, 0.8, 1.0])
   out = dis((out[0],out[0],out[1]))
   print(out)

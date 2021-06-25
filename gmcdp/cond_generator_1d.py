@@ -43,6 +43,42 @@ class ConfigLayer(Layer):
     })
     return config
 
+class WidthLayer(ConfigLayer):
+  """
+  base class for configurable layer with data width
+  """
+  def __init__(self, width, *args, **kwargs):
+    super(WidthLayer, self).__init__(*args, **kwargs)
+    self.width = width
+    return
+
+  def get_config(self):
+    config = super(WidthLayer, self).get_config()
+    config.update({
+      'width' : self.width,
+    })
+    return
+
+
+class EncodeLayer(WidthLayer):
+  """
+  base class for position and linear projection encoding layers
+  """
+  def __init__(self, *args, **kwargs):
+    super(EncodeLayer, self).__init__(*args, **kwargs)
+    # construct
+    self.pos = tf.expand_dims(tf.linspace(+1.0, -1.0, self.width), axis=0)
+    self.flt = tf.keras.layers.Flatten()
+    self.lpr = tf.keras.layers.Dense(units=self.width,
+                                  use_bias=self.use_bias,
+                                  kernel_initializer=self.kernel_initializer,
+                                  bias_initializer=self.bias_initializer,
+                                  kernel_regularizer=self.kernel_regularizer,
+                                  bias_regularizer=self.bias_regularizer,
+                                  kernel_constraint=self.kernel_constraint,
+                                  bias_constraint=self.bias_constraint)
+    return
+
 
 ## BEG LINEAR MAPS #############################################################
 
@@ -711,13 +747,124 @@ class Const(Layer):
     return x
 
 
+
+
+
+
+
+
+
+class EncodeGen(EncodeLayer):
+  """
+  encodes labels for generator
+  """
+  def __init__(self, *args, **kwargs):
+    super(EncodeGen, self).__init__(*args, **kwargs)
+    return
+
+  def call(self, inputs):
+    bs = tf.shape(inputs)[0]
+    ps = tf.tile(self.pos, multiples=(bs,1))      # sequence position encoding
+    rv = tf.random.normal(shape=(bs,self.width))  # random vector data
+    lp = self.lpr(self.flt(inputs))               # linear project labels
+    return tf.stack((ps, rv, lp), axis=-1)
+
+
+class DecodeGen(ConfigLayer):
+  """
+  decodes generator output to data
+  """
+  def __init__(self, *args, **kwargs):
+    super(DecodeGen, self).__init__(*args, **kwargs)
+    # construct
+    self.lpr = tf.keras.layers.Dense(units=1,
+                                  use_bias=self.use_bias,
+                                  kernel_initializer=self.kernel_initializer,
+                                  bias_initializer=self.bias_initializer,
+                                  kernel_regularizer=self.kernel_regularizer,
+                                  bias_regularizer=self.bias_regularizer,
+                                  kernel_constraint=self.kernel_constraint,
+                                  bias_constraint=self.bias_constraint)
+    self.flt = tf.keras.layers.Flatten()
+    return
+
+  def call(self, inputs):
+    return self.flt(self.lpr(inputs))
+
+
+class PosMaskedMHABlock(WidthLayer):
+  """
+  multi-head attention + ffwd block with position vector mask
+  """
+  def __init__(self, dim, heads, *args, **kwargs):
+    super(PosMaskedMHABlock, self).__init__(*args, **kwargs)
+    # config copy
+    self.dim   = dim
+    self.heads = heads
+    # construct
+    self.mha = tf.keras.layers.MultiHeadAttention(num_heads=self.heads,
+                                    key_dim=self.dim,
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
+    self.ff1 = tf.keras.layers.Dense(units=self.dim * 2,
+                                     activation=tf.keras.activations.tanh,
+                                     use_bias=self.use_bias,
+                                     kernel_initializer=self.kernel_initializer,
+                                     bias_initializer=self.bias_initializer,
+                                     kernel_regularizer=self.kernel_regularizer,
+                                     bias_regularizer=self.bias_regularizer,
+                                     kernel_constraint=self.kernel_constraint,
+                                     bias_constraint=self.bias_constraint)
+    self.ff2 = tf.keras.layers.Dense(units=self.dim,
+                                     activation=tf.keras.activations.tanh,
+                                     use_bias=self.use_bias,
+                                     kernel_initializer=self.kernel_initializer,
+                                     bias_initializer=self.bias_initializer,
+                                     kernel_regularizer=self.kernel_regularizer,
+                                     bias_regularizer=self.bias_regularizer,
+                                     kernel_constraint=self.kernel_constraint,
+                                     bias_constraint=self.bias_constraint)
+    msk_list = [tf.zeros(shape=(1,self.width))]
+    for i in range(1,self.dim):
+      msk_list.append(tf.ones(shape=(1,self.width)))
+    self.msk = tf.stack(msk_list, axis=-1)
+    return
+
+  def call(self, inputs):
+    a = inputs + (self.mha(inputs,inputs) * self.msk)
+    b = self.ff1(a)
+    b = a + (self.ff2(b) * self.msk)
+    return b
+
+  def get_config(self):
+    config = super(PosMaskedMHABlock, self).get_config()
+    config.update({
+      'dim'   : self.dim,
+      'heads' : self.heads,
+    })
+    return config
+
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
-def CondGen1D(input_shape, width, attn_hds=8):
+def CondGen1D(input_shape, width, attn_hds=4):
   """
   construct generator using functional API
   """
   inputs = tf.keras.Input(shape=input_shape, name='lblin')
+  output = EncodeGen(width=width, name='encod')(inputs)
+  output = PosMaskedMHABlock(width=width,
+                             dim=3,
+                             heads=attn_hds,
+                             name='mha_1')(output)
+  output = DecodeGen(name='decod')(output)
+
+
+  """
   #output = GenStart(width=width)(output)
   #output = CrossMultHdAttn(width=width, heads=attn_hds)(output)
 
@@ -733,10 +880,9 @@ def CondGen1D(input_shape, width, attn_hds=8):
   # linear gaussian sampling
   #output = LinGausSamp(width=width)(inputs)
   # constant map
-  output = Const(width=width)(inputs)
-  output = tf.keras.layers.Flatten(name='fltn')(output)
+  #output = Const(width=width)(inputs)
+  #output = tf.keras.layers.Flatten(name='fltn')(output)
 
-  """
   output = GenStart(width=width, dim=latent_dim, name='genst')(inputs)
   # encoder blocks
   for i in range(nblocks):
@@ -793,6 +939,6 @@ if __name__ == '__main__':
   input_shape  = tf.shape(lbls)
   output_shape = tf.shape(data)
   mdl = CondGen1D((input_shape[1],), output_shape[1])
-  mdl.summary(positions=[0.3, 0.75, 0.85, 1.0])
+  mdl.summary(positions=[0.4, 0.7, 0.8, 1.0])
   out = mdl(lbls)
   print(out)
