@@ -869,7 +869,7 @@ class PosMaskedMHABlock(WidthLayer):
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
-def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=4):
+def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=2):
   """
   construct generator using functional API
   """
