@@ -802,6 +802,7 @@ class PosMaskedMHABlock(WidthLayer):
     self.dim   = dim
     self.heads = heads
     # construct
+    # multi-head attention layer
     self.mha = tf.keras.layers.MultiHeadAttention(num_heads=self.heads,
                                     key_dim=self.dim,
                                     use_bias=self.use_bias,
@@ -811,6 +812,7 @@ class PosMaskedMHABlock(WidthLayer):
                                     bias_regularizer=self.bias_regularizer,
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
+    # feed-forward layers
     self.ff1 = tf.keras.layers.Dense(units=self.dim * 2,
                                      use_bias=self.use_bias,
                                      kernel_initializer=self.kernel_initializer,
@@ -819,7 +821,7 @@ class PosMaskedMHABlock(WidthLayer):
                                      bias_regularizer=self.bias_regularizer,
                                      kernel_constraint=self.kernel_constraint,
                                      bias_constraint=self.bias_constraint)
-    self.ff2 = tf.keras.layers.Dense(units=self.dim,
+    self.ff2 = tf.keras.layers.Dense(units=self.dim * 2,
                                      use_bias=self.use_bias,
                                      kernel_initializer=self.kernel_initializer,
                                      bias_initializer=self.bias_initializer,
@@ -827,6 +829,19 @@ class PosMaskedMHABlock(WidthLayer):
                                      bias_regularizer=self.bias_regularizer,
                                      kernel_constraint=self.kernel_constraint,
                                      bias_constraint=self.bias_constraint)
+    # linear back-projection layer
+    self.lpr = tf.keras.layers.Dense(units=self.dim,
+                                     use_bias=self.use_bias,
+                                     kernel_initializer=self.kernel_initializer,
+                                     bias_initializer=self.bias_initializer,
+                                     kernel_regularizer=self.kernel_regularizer,
+                                     bias_regularizer=self.bias_regularizer,
+                                     kernel_constraint=self.kernel_constraint,
+                                     bias_constraint=self.bias_constraint)
+    # layer normalizations
+    self.ln1 = tf.keras.layers.LayerNormalization(axis=(-2,-1))
+    self.ln2 = tf.keras.layers.LayerNormalization(axis=(-2,-1))
+    # position masking
     msk_list = [tf.zeros(shape=(1,self.width))]
     for i in range(1,self.dim):
       msk_list.append(tf.ones(shape=(1,self.width)))
@@ -834,9 +849,13 @@ class PosMaskedMHABlock(WidthLayer):
     return
 
   def call(self, inputs):
-    a = inputs + (self.mha(inputs,inputs) * self.msk)
+    # sub-block 1 - multi-head attention with residual connection
+    a = self.ln1(self.mha(inputs,inputs))
+    a = inputs + (a * self.msk)
+    # sub-block 2 - feed-forward with residual connection
     b = tf.nn.leaky_relu(self.ff1(a))
     b = tf.nn.leaky_relu(self.ff2(b))
+    b = self.ln2(self.lpr(b))
     b = a + (b * self.msk)
     return b
 
