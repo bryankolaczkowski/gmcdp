@@ -58,7 +58,7 @@ class DecodeDis(WidthLayer):
                                   kernel_regularizer=self.kernel_regularizer,
                                   bias_regularizer=self.bias_regularizer,
                                   kernel_constraint=self.kernel_constraint,
-                                  bias_constraint=self.bias_constraint)\
+                                  bias_constraint=self.bias_constraint)
     self.dn4 = tf.keras.layers.Dense(units=self.width,
                                   use_bias=self.use_bias,
                                   kernel_initializer=self.kernel_initializer,
