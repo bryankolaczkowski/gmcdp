@@ -812,7 +812,6 @@ class PosMaskedMHABlock(WidthLayer):
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
     self.ff1 = tf.keras.layers.Dense(units=self.dim * 2,
-                                     activation=tf.keras.activations.tanh,
                                      use_bias=self.use_bias,
                                      kernel_initializer=self.kernel_initializer,
                                      bias_initializer=self.bias_initializer,
@@ -821,7 +820,6 @@ class PosMaskedMHABlock(WidthLayer):
                                      kernel_constraint=self.kernel_constraint,
                                      bias_constraint=self.bias_constraint)
     self.ff2 = tf.keras.layers.Dense(units=self.dim,
-                                     activation=tf.keras.activations.tanh,
                                      use_bias=self.use_bias,
                                      kernel_initializer=self.kernel_initializer,
                                      bias_initializer=self.bias_initializer,
@@ -837,8 +835,9 @@ class PosMaskedMHABlock(WidthLayer):
 
   def call(self, inputs):
     a = inputs + (self.mha(inputs,inputs) * self.msk)
-    b = self.ff1(a)
-    b = a + (self.ff2(b) * self.msk)
+    b = tf.nn.leaky_relu(self.ff1(a))
+    b = tf.nn.leaky_relu(self.ff2(b))
+    b = a + (b * self.msk)
     return b
 
   def get_config(self):

@@ -37,7 +37,6 @@ class DecodeDis(WidthLayer):
     self.flt = tf.keras.layers.Flatten()
     self.dn1 = tf.keras.layers.Dense(units=self.width,
                                   use_bias=self.use_bias,
-                                  activation=tf.keras.activations.tanh,
                                   kernel_initializer=self.kernel_initializer,
                                   bias_initializer=self.bias_initializer,
                                   kernel_regularizer=self.kernel_regularizer,
@@ -46,7 +45,6 @@ class DecodeDis(WidthLayer):
                                   bias_constraint=self.bias_constraint)
     self.dn2 = tf.keras.layers.Dense(units=self.width,
                                   use_bias=self.use_bias,
-                                  activation=tf.keras.activations.tanh,
                                   kernel_initializer=self.kernel_initializer,
                                   bias_initializer=self.bias_initializer,
                                   kernel_regularizer=self.kernel_regularizer,
@@ -66,8 +64,8 @@ class DecodeDis(WidthLayer):
 
   def call(self, inputs):
     x = self.flt(inputs)
-    x = self.dn1(x)
-    x = self.dn2(x)
+    x = tf.nn.leaky_relu(self.dn1(x))
+    x = tf.nn.leaky_relu(self.dn2(x))
     return self.out(x)
 
 
