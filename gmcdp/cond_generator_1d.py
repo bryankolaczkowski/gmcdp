@@ -869,72 +869,18 @@ class PosMaskedMHABlock(WidthLayer):
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
-def CondGen1D(input_shape, width, attn_hds=4):
+def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=4):
   """
   construct generator using functional API
   """
-  inputs = tf.keras.Input(shape=input_shape, name='lblin')
-  output = EncodeGen(width=width, name='encod')(inputs)
-  output = PosMaskedMHABlock(width=width,
-                             dim=3,
-                             heads=attn_hds,
-                             name='mha_1')(output)
-  output = DecodeGen(name='decod')(output)
-
-
-  """
-  #output = GenStart(width=width)(output)
-  #output = CrossMultHdAttn(width=width, heads=attn_hds)(output)
-
-  # nonlinear label embedding
-  #output = tf.keras.layers.Flatten()(inputs)
-  #for i in range(2):
-  #  output = tf.keras.layers.Dense(units=64,
-  #                                 activation=tf.keras.activations.tanh)(output)
-
-
-  # simple linear map
-  #output = LinMap(width=width, dim=1)(inputs)
-  # linear gaussian sampling
-  #output = LinGausSamp(width=width)(inputs)
-  # constant map
-  #output = Const(width=width)(inputs)
-  #output = tf.keras.layers.Flatten(name='fltn')(output)
-
-  output = GenStart(width=width, dim=latent_dim, name='genst')(inputs)
-  # encoder blocks
-  for i in range(nblocks):
-    output = EncoderBlock(latent_dim=latent_dim,
-                          attn_hds=attn_hds,
-                          key_dim=key_dim,
-                          name='enc{}'.format(i))(output)
-  # decoder blocks
-  for i in range(nblocks):
-    output = DecoderBlock(latent_dim=latent_dim,
-                          attn_hds=attn_hds,
-                          key_dim=key_dim,
-                          name='dec{}'.format(i))(output)
-
-  # map input to latent space
-
-  output = StochasticLinMap(width=start_width,
-                            dim=latent_dim,
-                            name='linmp')(inputs)
-  latent_dim *= 2
-  ## transformer blocks
-  nblocks = (int(width).bit_length()) - (int(start_width).bit_length())
-  nblocks = 2
-  for i in range(nblocks):
-    output = TransBlock(latent_dim=latent_dim,
-                        attn_hds=attn_hds,
-                        key_dim=latent_dim,
-                        name='utb_{}'.format(i))(output)
-  # introduce noise
-  output = PointwiseLinNoisify(name='noi_{}'.format(i))(output)
-  # map latent space to data space
-  output = LinMap(width, 1, name='plnmp')(output)
-  """
-
+  inputs = tf.keras.Input(shape=input_shape, name='lbin')
+  output = EncodeGen(width=width, name='encd')(inputs)
+  for i in range(nattnblocks):
+    output = PosMaskedMHABlock(width=width,
+                              dim=3,
+                              heads=attn_hds,
+                              name='mha{}'.format(i))(output)
+  output = DecodeGen(name='decd')(output)
   return Model(inputs=inputs, outputs=(output,inputs))
 
 

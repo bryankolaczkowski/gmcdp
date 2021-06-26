@@ -87,7 +87,7 @@ class DecodeDis(WidthLayer):
     return self.out(x)
 
 
-def CondDis1D(data_width, label_width, attn_hds=4):
+def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=4):
   """
   construct a discriminator using functional API
   """
@@ -95,10 +95,11 @@ def CondDis1D(data_width, label_width, attn_hds=4):
   in2 = tf.keras.Input(shape=(data_width,),  name='in2')
   in3 = tf.keras.Input(shape=(label_width,), name='in3')
   out = EncodeDis(width=data_width, name='enc')((in1,in2,in3))
-  out = PosMaskedMHABlock(width=data_width,
-                          dim=4,
-                          heads=attn_hds,
-                          name='ma1')(out)
+  for i in range(nattnblocks):
+    out = PosMaskedMHABlock(width=data_width,
+                            dim=4,
+                            heads=attn_hds,
+                            name='ma{}'.format(i))(out)
   out = DecodeDis(width=data_width, name='dec')(out)
   return Model(inputs=(in1,in2,in3), outputs=out)
 
