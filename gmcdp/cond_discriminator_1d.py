@@ -51,6 +51,22 @@ class DecodeDis(WidthLayer):
                                   bias_regularizer=self.bias_regularizer,
                                   kernel_constraint=self.kernel_constraint,
                                   bias_constraint=self.bias_constraint)
+    self.dn3 = tf.keras.layers.Dense(units=self.width,
+                                  use_bias=self.use_bias,
+                                  kernel_initializer=self.kernel_initializer,
+                                  bias_initializer=self.bias_initializer,
+                                  kernel_regularizer=self.kernel_regularizer,
+                                  bias_regularizer=self.bias_regularizer,
+                                  kernel_constraint=self.kernel_constraint,
+                                  bias_constraint=self.bias_constraint)\
+    self.dn4 = tf.keras.layers.Dense(units=self.width,
+                                  use_bias=self.use_bias,
+                                  kernel_initializer=self.kernel_initializer,
+                                  bias_initializer=self.bias_initializer,
+                                  kernel_regularizer=self.kernel_regularizer,
+                                  bias_regularizer=self.bias_regularizer,
+                                  kernel_constraint=self.kernel_constraint,
+                                  bias_constraint=self.bias_constraint)
     self.out = tf.keras.layers.Dense(units=1,
                                   use_bias=self.use_bias,
                                   kernel_initializer=self.kernel_initializer,
@@ -66,6 +82,8 @@ class DecodeDis(WidthLayer):
     x = self.flt(inputs)
     x = tf.nn.leaky_relu(self.dn1(x))
     x = tf.nn.leaky_relu(self.dn2(x))
+    x = tf.nn.leaky_relu(self.dn3(x))
+    x = tf.nn.leaky_relu(self.dn4(x))
     return self.out(x)
 
 
