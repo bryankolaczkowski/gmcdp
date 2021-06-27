@@ -6,7 +6,7 @@ from tensorflow.keras import initializers, regularizers, constraints, Model
 from tensorflow.keras.layers import Layer
 import tensorflow as tf
 
-from cond_generator_1d import EncodeLayer, WidthLayer, PosMaskedMHABlock
+from cond_generator_1d import EncodeLayer, ReluLayer, PosMaskedMHABlock
 
 
 class EncodeDis(EncodeLayer):
@@ -18,16 +18,16 @@ class EncodeDis(EncodeLayer):
     return
 
   def call(self, inputs):
-    dt1 = inputs[0]
-    dt2 = inputs[1]
-    lbl = inputs[2]
+    dt1 = inputs[0]   # data - real or fake?
+    dt2 = inputs[1]   # data - definitely fake
+    lbl = inputs[2]   # labels
     bs  = tf.shape(lbl)[0]
     pse = tf.tile(self.pos, multiples=(bs,1))   # sequence position encoding
     lpl = self.lpr(self.flt(lbl))               # linear project labels
-    return tf.stack((pse, dt1, dt2, lpl), axis=-1)
+    return tf.stack((pse, lpl, dt2, dt1), axis=-1)
 
 
-class DecodeDis(WidthLayer):
+class DecodeDis(ReluLayer):
   """
   decodes discriminator output to score
   """
@@ -64,12 +64,12 @@ class DecodeDis(WidthLayer):
 
   def call(self, inputs):
     x = self.flt(inputs)
-    x = tf.nn.leaky_relu(self.dn1(x))
-    x = tf.nn.leaky_relu(self.dn2(x))
+    x = tf.nn.leaky_relu(self.dn1(x), alpha=self.relu_alpha)
+    x = tf.nn.leaky_relu(self.dn2(x), alpha=self.relu_alpha)
     return self.out(x)
 
 
-def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=2):
+def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=8):
   """
   construct a discriminator using functional API
   """

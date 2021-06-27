@@ -43,6 +43,7 @@ class ConfigLayer(Layer):
     })
     return config
 
+
 class WidthLayer(ConfigLayer):
   """
   base class for configurable layer with data width
@@ -56,6 +57,23 @@ class WidthLayer(ConfigLayer):
     config = super(WidthLayer, self).get_config()
     config.update({
       'width' : self.width,
+    })
+    return
+
+
+class ReluLayer(WidthLayer):
+  """
+  base class for layers with leaky-ReLU activations
+  """
+  def __init__(self, relu_alpha=0.2, *args, **kwargs):
+    super(ReluLayer, self).__init__(*args, **kwargs)
+    self.relu_alpha = relu_alpha
+    return
+
+  def get_config(self):
+    config = super(ReluLayer, self).get_config()
+    config.update({
+      'relu_alpha' : self.relu_alpha,
     })
     return
 
@@ -765,9 +783,9 @@ class EncodeGen(EncodeLayer):
   def call(self, inputs):
     bs = tf.shape(inputs)[0]
     ps = tf.tile(self.pos, multiples=(bs,1))      # sequence position encoding
-    rv = tf.random.normal(shape=(bs,self.width))  # random vector data
     lp = self.lpr(self.flt(inputs))               # linear project labels
-    return tf.stack((ps, rv, lp), axis=-1)
+    rv = tf.random.normal(shape=(bs,self.width))  # random vector data
+    return tf.stack((ps, lp, rv), axis=-1)
 
 
 class DecodeGen(ConfigLayer):
@@ -792,7 +810,7 @@ class DecodeGen(ConfigLayer):
     return self.flt(self.lpr(inputs))
 
 
-class PosMaskedMHABlock(WidthLayer):
+class PosMaskedMHABlock(ReluLayer):
   """
   multi-head attention + ffwd block with position vector mask
   """
@@ -853,8 +871,8 @@ class PosMaskedMHABlock(WidthLayer):
     a = self.ln1(self.mha(inputs,inputs))
     a = inputs + (a * self.msk)
     # sub-block 2 - feed-forward with residual connection
-    b = tf.nn.leaky_relu(self.ff1(a))
-    b = tf.nn.leaky_relu(self.ff2(b))
+    b = tf.nn.leaky_relu(self.ff1(a), alpha=self.relu_alpha)
+    b = tf.nn.leaky_relu(self.ff2(b), alpha=self.relu_alpha)
     b = self.ln2(self.lpr(b))
     b = a + (b * self.msk)
     return b
@@ -869,7 +887,7 @@ class PosMaskedMHABlock(WidthLayer):
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
-def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=2):
+def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=8):
   """
   construct generator using functional API
   """
