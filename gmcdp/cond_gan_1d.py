@@ -282,5 +282,6 @@ if __name__ == '__main__':
   # fit gan
   gan.fit(data,
           epochs=10000,
+          verbose=2,
           callbacks=[tf.keras.callbacks.TensorBoard(),
                      PlotCallback()])
