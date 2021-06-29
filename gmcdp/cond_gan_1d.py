@@ -244,6 +244,8 @@ if __name__ == '__main__':
   # generated data image callback
   import io
   import numpy as np
+  import matplotlib
+  matplotlib.use('Agg')
   import matplotlib.pyplot as plt
   class PlotCallback(tf.keras.callbacks.Callback):
     def __init__(self, log_dir='logs'):
