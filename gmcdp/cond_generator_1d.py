@@ -723,8 +723,8 @@ class DataNoise(WidthLayer):
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
     self.mask = tf.stack((tf.zeros(shape=(1,self.width)),
-                           tf.ones(shape=(1,self.width)),
-                          tf.zeros(shape=(1,self.width))), axis=-1)
+                          tf.zeros(shape=(1,self.width)),
+                           tf.ones(shape=(1,self.width))), axis=-1)
     return
 
   def call(self, inputs):
