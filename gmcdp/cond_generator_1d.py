@@ -5,7 +5,9 @@ from __future__ import print_function
 from tensorflow.keras import initializers, regularizers, constraints, Model
 from tensorflow.keras.layers import Layer
 import tensorflow as tf
+import math
 
+## BASE CLASSES ################################################################
 
 class ConfigLayer(Layer):
   """
@@ -98,7 +100,22 @@ class EncodeLayer(WidthLayer):
     return
 
 
-## BEG LINEAR MAPS #############################################################
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 class LinMap(ConfigLayer):
   """
@@ -165,227 +182,6 @@ class PointwiseLinMap(ConfigLayer):
       'out_dim' : self.out_dim,
     })
     return config
-
-## END LINEAR MAPS #############################################################
-
-
-
-### BEG TRANSFORMER CLASSES ####################################################
-
-class DataSelfAttn(ConfigLayer):
-  """
-  data multi-head self-attention with residual connection
-  """
-  def __init__(self,
-               attn_hds,
-               key_dim,
-               *args,
-               **kwargs):
-    super(DataSelfAttn, self).__init__(*args, **kwargs)
-    # config copy
-    self.attn_hds = attn_hds
-    self.key_dim  = key_dim
-    # construct
-    self.lnm = tf.keras.layers.LayerNormalization(axis=(-2,-1))
-    self.mha = tf.keras.layers.MultiHeadAttention(num_heads=self.attn_hds,
-                                    key_dim=self.key_dim,
-                                    use_bias=self.use_bias,
-                                    kernel_initializer=self.kernel_initializer,
-                                    bias_initializer=self.bias_initializer,
-                                    kernel_regularizer=self.kernel_regularizer,
-                                    bias_regularizer=self.bias_regularizer,
-                                    kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint)
-    return
-
-  def call(self, inputs):
-    x = inputs[0]           # data self-attention
-    x = self.lnm(x)         # layer pre-normalization
-    x = self.mha(x,x)       # multi-head self-attention
-    return (inputs[0]+x, inputs[1]) # residual connection
-
-  def get_config(self):
-    config = super(DataSelfAttn, self).get_config()
-    config.update({
-      'attn_hds' : self.attn_hds,
-      'key_dim'  : self.key_dim,
-    })
-    return config
-
-
-class LabelSelfAttn(DataSelfAttn):
-  """
-  label multi-head self-attention with residual connection
-  """
-  def __init__(self, *args, **kwargs):
-    super(LabelSelfAttn, self).__init__(*args, **kwargs)
-    return
-
-  def call(self, inputs):
-    x = inputs[1]           # label self-attention
-    x = self.lnm(x)         # layer pre-normalization
-    x = self.mha(x,x)       # multi-head self-attention
-    return (inputs[0], inputs[1]+x) # residual connection
-
-
-class DataCrossAttn(DataSelfAttn):
-  """
-  data multi-head cross-attention with residual connection
-  """
-  def __init__(self, *args, **kwargs):
-    super(DataCrossAttn, self).__init__(*args, **kwargs)
-    return
-
-  def call(self, inputs):
-    x = inputs[0]             # data is query
-    x = self.lnm(x)           # layer pre-normalization of data
-    x = self.mha(x,inputs[1]) # multi-head cross-attention
-    return (inputs[0]+x, inputs[1]) # residual connection
-
-
-class DataFeedForward(ConfigLayer):
-  """
-  data layer-normalized pointwise feed-forward with residual connection
-  """
-  def __init__(self, latent_dim, *args, **kwargs):
-    super(DataFeedForward, self).__init__(*args, **kwargs)
-    # config copy
-    self.latent_dim = latent_dim
-    # construct
-    self.lnm = tf.keras.layers.LayerNormalization(axis=(-2,-1))
-    self.ff1 = tf.keras.layers.Dense(units=self.latent_dim*2,
-                                     use_bias=self.use_bias,
-                                     kernel_initializer=self.kernel_initializer,
-                                     bias_initializer=self.bias_initializer,
-                                     kernel_regularizer=self.kernel_regularizer,
-                                     bias_regularizer=self.bias_regularizer,
-                                     kernel_constraint=self.kernel_constraint,
-                                     bias_constraint=self.bias_constraint)
-    self.ff2 = tf.keras.layers.Dense(units=self.latent_dim,
-                                     use_bias=self.use_bias,
-                                     kernel_initializer=self.kernel_initializer,
-                                     bias_initializer=self.bias_initializer,
-                                     kernel_regularizer=self.kernel_regularizer,
-                                     bias_regularizer=self.bias_regularizer,
-                                     kernel_constraint=self.kernel_constraint,
-                                     bias_constraint=self.bias_constraint)
-    return
-
-  def call(self, inputs):
-    x = inputs[0]         # data
-    x = self.lnm(x)       # layer normalization
-    x = self.ff1(x)       # linear pointwise feed-forward 1
-    x = tf.nn.gelu(x)     # nonlinear activation
-    x = self.ff2(x)       # linear pointwise feed-forward 2
-    return (inputs[0]+x, inputs[1]) # residual connection
-
-  def get_config(self):
-    config = super(DataFeedForward, self).get_config()
-    config.update({
-      'latent_dim' : self.latent_dim,
-    })
-    return config
-
-
-class LabelFeedForward(DataFeedForward):
-  """
-  label layer-normalized pointwise feed-forward with residual connection
-  """
-  def __init__(self, *args, **kwargs):
-    super(LabelFeedForward, self).__init__(*args, **kwargs)
-
-  def call(self, inputs):
-    x = inputs[1]         # data
-    x = self.lnm(x)       # layer normalization
-    x = self.ff1(x)       # linear pointwise feed-forward 1
-    x = tf.nn.gelu(x)     # nonlinear activation
-    x = self.ff2(x)       # linear pointwise feed-forward 2
-    return (inputs[0], inputs[1]+x) # residual connection
-
-
-class EncoderBlock(LabelSelfAttn):
-  """
-  encoder uses label self-attention; data is passed through
-  """
-  def __init__(self, latent_dim, *args, **kwargs):
-    super(EncoderBlock, self).__init__(*args, **kwargs)
-    # config copy
-    self.latent_dim = latent_dim
-    # construct
-    self.ffdblock = LabelFeedForward(latent_dim=self.latent_dim,
-                                     use_bias=self.use_bias,
-                                     kernel_initializer=self.kernel_initializer,
-                                     bias_initializer=self.bias_initializer,
-                                     kernel_regularizer=self.kernel_regularizer,
-                                     bias_regularizer=self.bias_regularizer,
-                                     kernel_constraint=self.kernel_constraint,
-                                     bias_constraint=self.bias_constraint)
-    return
-
-  def call(self, inputs):
-    out = super(EncoderBlock, self).call(inputs)
-    out = self.ffdblock(out)
-    return out
-
-  def get_config(self):
-    config = super(EncoderBlock, self).get_config()
-    config.update({
-      'latent_dim' : self.latent_dim,
-    })
-    return config
-
-
-class DecoderBlock(DataSelfAttn):
-  """
-  decoder uses data self- and cross-attention; labels are passed through
-  """
-  def __init__(self, latent_dim, *args, **kwargs):
-    super(DecoderBlock, self).__init__(*args, **kwargs)
-    # config copy
-    self.latent_dim = latent_dim
-    # construct
-    self.crsblock = DataCrossAttn(attn_hds=self.attn_hds,
-                                  key_dim=self.key_dim,
-                                  use_bias=self.use_bias,
-                                  kernel_initializer=self.kernel_initializer,
-                                  bias_initializer=self.bias_initializer,
-                                  kernel_regularizer=self.kernel_regularizer,
-                                  bias_regularizer=self.bias_regularizer,
-                                  kernel_constraint=self.kernel_constraint,
-                                  bias_constraint=self.bias_constraint)
-    self.ffdblock = DataFeedForward(latent_dim=self.latent_dim,
-                                    use_bias=self.use_bias,
-                                    kernel_initializer=self.kernel_initializer,
-                                    bias_initializer=self.bias_initializer,
-                                    kernel_regularizer=self.kernel_regularizer,
-                                    bias_regularizer=self.bias_regularizer,
-                                    kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint)
-    return
-
-  def call(self, inputs):
-    out = super(DecoderBlock, self).call(inputs)
-    out = self.crsblock(out)
-    out = self.ffdblock(out)
-    return out
-
-  def get_config(self):
-    config = super(DecoderBlock, self).get_config()
-    config.update({
-      'latent_dim' : self.latent_dim,
-    })
-    return config
-
-### END TRANSFORMER CLASSES ####################################################
-
-
-
-
-
-
-
-
-
 
 
 
@@ -731,7 +527,7 @@ class CrossMultHdAttn(ConfigLayer):
     # construct
     self.mha = tf.keras.layers.MultiHeadAttention(num_heads=heads, key_dim=2)
     self.msk = tf.stack((tf.zeros(shape=(1,self.width)),
-                         tf.ones(shape=(1,self.width))), axis=-1)
+                          tf.ones(shape=(1,self.width))), axis=-1)
     return
 
   def call(self, inputs):
@@ -771,6 +567,7 @@ class Const(Layer):
 
 
 
+## ENCODER CLASSES #############################################################
 
 class EncodeGen(EncodeLayer):
   """
@@ -885,19 +682,89 @@ class PosMaskedMHABlock(ReluLayer):
     })
     return config
 
+
+class AveUpsample(Layer):
+  """
+  average upsampling
+  """
+  def __init__(self, *args, **kwargs):
+    super(AveUpsample, self).__init__(*args, **kwargs)
+    self.upspl = tf.keras.layers.UpSampling1D(size=2)
+    self.avepl = tf.keras.layers.AveragePooling1D(pool_size=3,
+                                                  strides=1,
+                                                  padding='same')
+    return
+
+  def call(self, inputs):
+    return self.avepl(self.upspl(inputs))
+
+
+class DataNoise(WidthLayer):
+  """
+  adaptive noise injection into data
+  """
+  def __init__(self, *args, **kwargs):
+    super(DataNoise, self).__init__(*args, **kwargs)
+    self.mean = tf.keras.layers.Dense(units=1,
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
+    self.stdv = tf.keras.layers.Dense(units=1,
+                                    use_bias=self.use_bias,
+                                    activation=tf.keras.activations.softplus,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
+    self.mask = tf.stack((tf.zeros(shape=(1,self.width)),
+                           tf.ones(shape=(1,self.width)),
+                          tf.zeros(shape=(1,self.width))), axis=-1)
+    return
+
+  def call(self, inputs):
+    bs = tf.shape(inputs)[0]
+    mn = self.mean(inputs)  # project noise means
+    sd = self.stdv(inputs)  # project noise stdvs
+    # generate masked random vector affecting only data dimension
+    rv = tf.random.normal(mean=mn,
+                          stddev=sd,
+                          shape=(bs,self.width,1)) * self.mask
+    return inputs + rv
+
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
-def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=8):
+def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=2):
   """
   construct generator using functional API
   """
+  ## input encoding
+  start_width = 32
   inputs = tf.keras.Input(shape=input_shape, name='lbin')
-  output = EncodeGen(width=width, name='encd')(inputs)
+  output = EncodeGen(width=start_width, name='encd')(inputs)
+  ## upsampling subnet
+  n_upsampl_blks = int(math.log2(width) - math.log2(start_width))
+  curr_width = start_width
+  for i in range(n_upsampl_blks):
+    output = PosMaskedMHABlock(width=curr_width,
+                               dim=3,
+                               heads=attn_hds,
+                               name='mau{}'.format(i))(output)
+    output = AveUpsample(name='ups{}'.format(i))(output)
+    curr_width *= 2
+    output = DataNoise(width=curr_width, name='noi{}'.format(i))(output)
+  ## sel-attention subnet
   for i in range(nattnblocks):
     output = PosMaskedMHABlock(width=width,
                               dim=3,
                               heads=attn_hds,
                               name='mha{}'.format(i))(output)
+  ## data decoding
   output = DecodeGen(name='decd')(output)
   return Model(inputs=inputs, outputs=(output,inputs))
 
