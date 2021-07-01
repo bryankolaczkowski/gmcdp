@@ -123,7 +123,7 @@ class CondGan1D(Model):
     mask = tf.reshape(mask, shape=tf.shape(dta))
     dta  = dta * mask
     """
-    return inputs
+    return (dta, lbl)
 
   def pack(self, inputs):
     """
@@ -144,7 +144,7 @@ class CondGan1D(Model):
 
   def train_step(self, inputs):
     """
-    single training step
+    single training step; inputs are (data,labels)
     """
     bs = tf.shape(inputs[0])[0]
 
@@ -165,7 +165,7 @@ class CondGan1D(Model):
     self.optimizer.apply_discriminator_gradients(zip(grds,
                                                  self.disr.trainable_weights))
 
-    # train discriminator and generator using fake data
+    # train discriminator using fake data
     with tf.GradientTape() as tape:
       #fake_data = self.pack(self.augment(self.genr(inputs[1])))
       #preds     = self.disr(fake_data)
