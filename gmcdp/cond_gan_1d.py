@@ -102,12 +102,10 @@ class CondGan1D(Model):
     x = self.genr(inputs[1])
     return x
 
-  def augment(self, inputs):
+  def augment_data(self, dta):
     """
     data augmenation function
     """
-    dta = inputs[0]
-    lbl = inputs[1]
     """
     ## noisify random data entries
     mask = tf.cast(tf.random.categorical(tf.math.log([[0.9, 0.1]]),
@@ -123,7 +121,7 @@ class CondGan1D(Model):
     mask = tf.reshape(mask, shape=tf.shape(dta))
     dta  = dta * mask
     """
-    return (dta, lbl)
+    return dta
 
   def pack(self, inputs):
     """
@@ -159,7 +157,9 @@ class CondGan1D(Model):
     # train discriminator using real data
     with tf.GradientTape() as tape:
       #preds   = self.disr(self.pack(self.augment(inputs)))
-      preds   = self.disr((data, self.genr(lbls)[0], lbls))
+      preds   = self.disr((self.augment_data(data),
+                           self.genr(lbls)[0],
+                           lbls))
       disr_rl = self.compiled_loss(nones, preds)
     grds = tape.gradient(disr_rl, self.disr.trainable_weights)
     self.optimizer.apply_discriminator_gradients(zip(grds,
@@ -169,7 +169,9 @@ class CondGan1D(Model):
     with tf.GradientTape() as tape:
       #fake_data = self.pack(self.augment(self.genr(inputs[1])))
       #preds     = self.disr(fake_data)
-      preds   = self.disr((self.genr(lbls)[0], self.genr(lbls)[0], lbls))
+      preds   = self.disr((self.augment_data(self.genr(lbls)[0]),
+                           self.genr(lbls)[0],
+                           lbls))
       disr_fk = self.compiled_loss(pones, preds)
     grds = tape.gradient(disr_fk, self.disr.trainable_weights)
     self.optimizer.apply_discriminator_gradients(zip(grds,
@@ -180,7 +182,9 @@ class CondGan1D(Model):
       #fake_data = self.pack(self.augment(self.genr(inputs[1])))
       # calculate discriminator-induced loss
       #preds     = self.disr(fake_data)
-      preds     = self.disr((self.genr(lbls)[0], self.genr(lbls)[0], lbls))
+      preds     = self.disr((self.augment_data(self.genr(lbls)[0]),
+                             self.genr(lbls)[0],
+                             lbls))
       genr_loss = self.compiled_loss(nones, preds)
     grds = tape.gradient(genr_loss, self.genr.trainable_weights)
     self.optimizer.apply_generator_gradients(zip(grds,
