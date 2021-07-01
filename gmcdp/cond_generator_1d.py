@@ -575,14 +575,23 @@ class EncodeGen(EncodeLayer):
   """
   def __init__(self, *args, **kwargs):
     super(EncodeGen, self).__init__(*args, **kwargs)
+    self.lp2 = tf.keras.layers.Dense(units=self.width,
+                                  use_bias=self.use_bias,
+                                  kernel_initializer=self.kernel_initializer,
+                                  bias_initializer=self.bias_initializer,
+                                  kernel_regularizer=self.kernel_regularizer,
+                                  bias_regularizer=self.bias_regularizer,
+                                  kernel_constraint=self.kernel_constraint,
+                                  bias_constraint=self.bias_constraint)
     return
 
   def call(self, inputs):
     bs = tf.shape(inputs)[0]
-    ps = tf.tile(self.pos, multiples=(bs,1))      # sequence position encoding
-    lp = self.lpr(self.flt(inputs))               # linear project labels
-    rv = tf.random.normal(shape=(bs,self.width))  # random vector data
-    return tf.stack((ps, lp, rv), axis=-1)
+    ps = tf.tile(self.pos, multiples=(bs,1))    # sequence position encoding
+    ip = self.flt(inputs)                       # flatten inputs
+    lp = self.lpr(ip)                           # linear project labels
+    dt = self.lp2(ip)                           # linear project data
+    return tf.stack((ps, lp, dt), axis=-1)
 
 
 class DecodeGen(ConfigLayer):
@@ -758,7 +767,7 @@ def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=2):
     output = AveUpsample(name='ups{}'.format(i))(output)
     curr_width *= 2
     output = DataNoise(width=curr_width, name='noi{}'.format(i))(output)
-  ## sel-attention subnet
+  ## self-attention subnet
   for i in range(nattnblocks):
     output = PosMaskedMHABlock(width=width,
                               dim=3,
