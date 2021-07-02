@@ -23,6 +23,7 @@ class ConfigLayer(Layer):
                bias_constraint=None,
                **kwargs):
     super(ConfigLayer, self).__init__(**kwargs)
+    # config copy
     self.use_bias           = use_bias
     self.kernel_initializer = initializers.get(kernel_initializer)
     self.bias_initializer   = initializers.get(bias_initializer)
@@ -52,6 +53,7 @@ class WidthLayer(ConfigLayer):
   """
   def __init__(self, width, *args, **kwargs):
     super(WidthLayer, self).__init__(*args, **kwargs)
+    # config copy
     self.width = width
     return
 
@@ -60,7 +62,7 @@ class WidthLayer(ConfigLayer):
     config.update({
       'width' : self.width,
     })
-    return
+    return config
 
 
 class ReluLayer(WidthLayer):
@@ -69,6 +71,7 @@ class ReluLayer(WidthLayer):
   """
   def __init__(self, relu_alpha=0.2, *args, **kwargs):
     super(ReluLayer, self).__init__(*args, **kwargs)
+    # config copy
     self.relu_alpha = relu_alpha
     return
 
@@ -77,7 +80,7 @@ class ReluLayer(WidthLayer):
     config.update({
       'relu_alpha' : self.relu_alpha,
     })
-    return
+    return config
 
 
 class EncodeLayer(WidthLayer):
@@ -99,7 +102,6 @@ class EncodeLayer(WidthLayer):
                                   bias_constraint=self.bias_constraint)
     return
 
-
 ## ENCODER CLASSES #############################################################
 
 class EncodeGen(EncodeLayer):
@@ -108,6 +110,7 @@ class EncodeGen(EncodeLayer):
   """
   def __init__(self, *args, **kwargs):
     super(EncodeGen, self).__init__(*args, **kwargs)
+    # construct
     self.lp2 = tf.keras.layers.Dense(units=self.width,
                                   use_bias=self.use_bias,
                                   kernel_initializer=self.kernel_initializer,
@@ -134,14 +137,15 @@ class DecodeGen(ConfigLayer):
   def __init__(self, *args, **kwargs):
     super(DecodeGen, self).__init__(*args, **kwargs)
     # construct
-    self.lpr = tf.keras.layers.Dense(units=1,
-                                  use_bias=self.use_bias,
-                                  kernel_initializer=self.kernel_initializer,
-                                  bias_initializer=self.bias_initializer,
-                                  kernel_regularizer=self.kernel_regularizer,
-                                  bias_regularizer=self.bias_regularizer,
-                                  kernel_constraint=self.kernel_constraint,
-                                  bias_constraint=self.bias_constraint)
+    self.lpr = tf.keras.layers.LocallyConnected1D(filters=1,
+                                    kernel_size=1,
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
     self.flt = tf.keras.layers.Flatten()
     return
 
@@ -231,6 +235,7 @@ class AveUpsample(Layer):
   """
   def __init__(self, *args, **kwargs):
     super(AveUpsample, self).__init__(*args, **kwargs)
+    # construct
     self.upspl = tf.keras.layers.UpSampling1D(size=2)
     self.avepl = tf.keras.layers.AveragePooling1D(pool_size=3,
                                                   strides=1,
@@ -247,6 +252,7 @@ class DataNoise(WidthLayer):
   """
   def __init__(self, *args, **kwargs):
     super(DataNoise, self).__init__(*args, **kwargs)
+    # construct
     self.mean = tf.keras.layers.LocallyConnected1D(filters=1,
                                 kernel_size=1,
                                 use_bias=self.use_bias,
