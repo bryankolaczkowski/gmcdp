@@ -247,23 +247,25 @@ class DataNoise(WidthLayer):
   """
   def __init__(self, *args, **kwargs):
     super(DataNoise, self).__init__(*args, **kwargs)
-    self.mean = tf.keras.layers.Dense(units=1,
-                                    use_bias=self.use_bias,
-                                    kernel_initializer=self.kernel_initializer,
-                                    bias_initializer=self.bias_initializer,
-                                    kernel_regularizer=self.kernel_regularizer,
-                                    bias_regularizer=self.bias_regularizer,
-                                    kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint)
-    self.stdv = tf.keras.layers.Dense(units=1,
-                                    use_bias=self.use_bias,
-                                    activation=tf.keras.activations.softplus,
-                                    kernel_initializer=self.kernel_initializer,
-                                    bias_initializer=self.bias_initializer,
-                                    kernel_regularizer=self.kernel_regularizer,
-                                    bias_regularizer=self.bias_regularizer,
-                                    kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint)
+    self.mean = tf.keras.layers.LocallyConnected1D(filters=1,
+                                kernel_size=1,
+                                use_bias=self.use_bias,
+                                kernel_initializer=tf.keras.initializers.zeros,
+                                bias_initializer=tf.keras.initializers.zeros,
+                                kernel_regularizer=self.kernel_regularizer,
+                                bias_regularizer=self.bias_regularizer,
+                                kernel_constraint=self.kernel_constraint,
+                                bias_constraint=self.bias_constraint)
+    self.stdv = tf.keras.layers.LocallyConnected1D(filters=1,
+                                kernel_size=1,
+                                activation=tf.keras.activations.relu,
+                                use_bias=self.use_bias,
+                                kernel_initializer=tf.keras.initializers.zeros,
+                                bias_initializer=tf.keras.initializers.zeros,
+                                kernel_regularizer=self.kernel_regularizer,
+                                bias_regularizer=self.bias_regularizer,
+                                kernel_constraint=self.kernel_constraint,
+                                bias_constraint=self.bias_constraint)
     self.mask = tf.stack((tf.zeros(shape=(1,self.width)),
                           tf.zeros(shape=(1,self.width)),
                            tf.ones(shape=(1,self.width))), axis=-1)
@@ -271,8 +273,8 @@ class DataNoise(WidthLayer):
 
   def call(self, inputs):
     bs = tf.shape(inputs)[0]
-    mn = self.mean(inputs)  # project noise means
-    sd = self.stdv(inputs)  # project noise stdvs
+    mn = self.mean(inputs)          # project noise means
+    sd = self.stdv(inputs) + 1.0e-3 # project noise stdvs
     # generate masked random vector affecting only data dimension
     rv = tf.random.normal(mean=mn,
                           stddev=sd,
