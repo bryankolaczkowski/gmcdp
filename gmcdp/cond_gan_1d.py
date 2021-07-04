@@ -133,15 +133,28 @@ class CondGan1D(Model):
     single validation step
     """
     bs    = tf.shape(inputs[0])[0]  # batch size
-    nones = -tf.ones((bs,1))        # 'misleading' labels
-    data  = inputs[0]               # input data (ignored)
-    lbls  = inputs[1]               # input labels -> to generator
-    # calculate generator loss
-    val_genr_ls = self._calc_loss(qry_data=self.genr(lbls)[0],
-                                  gnr_data=self.genr(lbls)[0],
-                                  lbls=lbls,
-                                  y=nones)
-    return {'val_genr_ls' : val_genr_ls}
+    pones =  tf.ones((bs,1))        # positive labels
+    nones = -tf.ones((bs,1))        # negative labels
+    data  = inputs[0]               # input data
+    lbls  = inputs[1]               # input labels
+    # discriminator loss on real data
+    disr_rl = self._calc_loss(qry_data=data,
+                              gnr_data=self.genr(lbls)[0],
+                              lbls=lbls,
+                              y=nones)
+    # discriminator loss on fake data
+    disr_fk = self._calc_loss(qry_data=self.genr(lbls)[0],
+                              gnr_data=self.genr(lbls)[0],
+                              lbls=lbls,
+                              y=pones)
+    # generator loss
+    genr_ls = self._calc_loss(qry_data=self.genr(lbls)[0],
+                              gnr_data=self.genr(lbls)[0],
+                              lbls=lbls,
+                              y=nones)
+    return {'disr_rl' : disr_rl,
+            'disr_fk' : disr_fk,
+            'genr_ls' : genr_ls,}
 
   def train_step(self, inputs):
     """
@@ -163,10 +176,6 @@ class CondGan1D(Model):
                                 gnr_data=self.genr(lbls)[0],
                                 lbls=lbls,
                                 y=nones)
-      #preds = self.disr((self.augment_data(data),
-      #                   self.genr(lbls)[0],
-      #                   lbls))
-      #disr_rl = self.compiled_loss(nones, preds)
     grds = tape.gradient(disr_rl, self.disr.trainable_weights)
     self.optimizer.apply_discriminator_gradients(zip(grds,
                                                  self.disr.trainable_weights))
@@ -177,10 +186,6 @@ class CondGan1D(Model):
                                 gnr_data=self.genr(lbls)[0],
                                 lbls=lbls,
                                 y=pones)
-      #preds = self.disr((self.augment_data(self.genr(lbls)[0]),
-      #                   self.genr(lbls)[0],
-      #                   lbls))
-      #disr_fk = self.compiled_loss(pones, preds)
     grds = tape.gradient(disr_fk, self.disr.trainable_weights)
     self.optimizer.apply_discriminator_gradients(zip(grds,
                                                  self.disr.trainable_weights))
@@ -191,10 +196,6 @@ class CondGan1D(Model):
                                 gnr_data=self.genr(lbls)[0],
                                 lbls=lbls,
                                 y=nones)
-      #preds = self.disr((self.augment_data(self.genr(lbls)[0]),
-      #                   self.genr(lbls)[0],
-      #                   lbls))
-      #genr_ls = self.compiled_loss(nones, preds)
     grds = tape.gradient(genr_ls, self.genr.trainable_weights)
     self.optimizer.apply_generator_gradients(zip(grds,
                                              self.genr.trainable_weights))
