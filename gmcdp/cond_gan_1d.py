@@ -69,12 +69,10 @@ class CondGan1D(Model):
   def __init__(self,
                generator,
                discriminator,
-               pack_dim,
                **kwargs):
     super(CondGan1D, self).__init__(**kwargs)
     self.genr     = generator
     self.disr     = discriminator
-    self.pack_dim = pack_dim
     return
 
   def compile(self,
@@ -97,10 +95,12 @@ class CondGan1D(Model):
     return
 
   def call(self, inputs):
-    #x = self.pack(self.genr(inputs))
-    #x = self.disr(x)
-    x = self.genr(inputs[1])
-    return x
+    """
+    inputs should be labels
+    """
+    gdta,lbls = self.genr(inputs)  # generate data, labels
+    dsr_score = self.disr((gdta, self.genr(inputs)[0], inputs))
+    return ((gdta, lbls), dsr_score)
 
   def augment_data(self, dta):
     """
@@ -121,6 +121,28 @@ class CondGan1D(Model):
     dta  = dta * mask
     return dta
 
+  def _calc_loss(self, qry_data, gnr_data, lbls, y):
+    """
+    calculates appropriate loss function
+    """
+    y_hat = self.disr((qry_data, gnr_data, lbls))
+    return self.compiled_loss(y, y_hat)
+
+  def test_step(self, inputs):
+    """
+    single validation step
+    """
+    bs    = tf.shape(inputs[0])[0]  # batch size
+    nones = -tf.ones((bs,1))        # 'misleading' labels
+    data  = inputs[0]               # input data (ignored)
+    lbls  = inputs[1]               # input labels -> to generator
+    # calculate generator loss
+    val_genr_ls = self._calc_loss(qry_data=self.genr(lbls)[0],
+                                  gnr_data=self.genr(lbls)[0],
+                                  lbls=lbls,
+                                  y=nones)
+    return {'val_genr_ls' : val_genr_ls}
+
   def train_step(self, inputs):
     """
     single training step; inputs are (data,labels)
@@ -137,44 +159,55 @@ class CondGan1D(Model):
 
     # train discriminator using real data
     with tf.GradientTape() as tape:
-      preds = self.disr((self.augment_data(data),
-                         self.genr(lbls)[0],
-                         lbls))
-      disr_rl = self.compiled_loss(nones, preds)
+      disr_rl = self._calc_loss(qry_data=self.augment_data(data),
+                                gnr_data=self.genr(lbls)[0],
+                                lbls=lbls,
+                                y=nones)
+      #preds = self.disr((self.augment_data(data),
+      #                   self.genr(lbls)[0],
+      #                   lbls))
+      #disr_rl = self.compiled_loss(nones, preds)
     grds = tape.gradient(disr_rl, self.disr.trainable_weights)
     self.optimizer.apply_discriminator_gradients(zip(grds,
                                                  self.disr.trainable_weights))
 
     # train discriminator using fake data
     with tf.GradientTape() as tape:
-      preds = self.disr((self.augment_data(self.genr(lbls)[0]),
-                         self.genr(lbls)[0],
-                         lbls))
-      disr_fk = self.compiled_loss(pones, preds)
+      disr_fk = self._calc_loss(qry_data=self.augment_data(self.genr(lbls)[0]),
+                                gnr_data=self.genr(lbls)[0],
+                                lbls=lbls,
+                                y=pones)
+      #preds = self.disr((self.augment_data(self.genr(lbls)[0]),
+      #                   self.genr(lbls)[0],
+      #                   lbls))
+      #disr_fk = self.compiled_loss(pones, preds)
     grds = tape.gradient(disr_fk, self.disr.trainable_weights)
     self.optimizer.apply_discriminator_gradients(zip(grds,
                                                  self.disr.trainable_weights))
 
     # train generator
     with tf.GradientTape() as tape:
-      preds = self.disr((self.augment_data(self.genr(lbls)[0]),
-                         self.genr(lbls)[0],
-                         lbls))
-      genr_loss = self.compiled_loss(nones, preds)
-    grds = tape.gradient(genr_loss, self.genr.trainable_weights)
+      genr_ls = self._calc_loss(qry_data=self.augment_data(self.genr(lbls)[0]),
+                                gnr_data=self.genr(lbls)[0],
+                                lbls=lbls,
+                                y=nones)
+      #preds = self.disr((self.augment_data(self.genr(lbls)[0]),
+      #                   self.genr(lbls)[0],
+      #                   lbls))
+      #genr_ls = self.compiled_loss(nones, preds)
+    grds = tape.gradient(genr_ls, self.genr.trainable_weights)
     self.optimizer.apply_generator_gradients(zip(grds,
                                              self.genr.trainable_weights))
 
-    return {'disr_rl'   : disr_rl,
-            'disr_fk'   : disr_fk,
-            'genr_loss' : genr_loss,}
+    return {'disr_rl' : disr_rl,
+            'disr_fk' : disr_fk,
+            'genr_ls' : genr_ls,}
 
   def get_config(self):
     config = super(CondGan1D, self).get_config()
     config.update({
       'generator'     : tf.keras.layers.serialize(self.genr),
       'discriminator' : tf.keras.layers.serialize(self.disr),
-      'pack_dim'      : self.pack_dim,
     })
     return config
 
@@ -187,29 +220,40 @@ if __name__ == '__main__':
   sys.path.append("../tests")
   import test_data_generator
 
+  ### DATA INTAKE ##############################################################
+
+  ## training data ##
   ndata     = 16344
   #ndata     = 262144
   batchsize = 128
-  pack_dim  = 1
 
-  # generate simulated data and labels
+  # generate training simulated data and labels
   dtas,lbls = test_data_generator.gen_dataset(ndata, plot=False)
   print(dtas,lbls)
   lbl_shp = tf.shape(lbls)
   dta_shp = tf.shape(dtas)
 
-  # create a little 'generator model' that maps the label vector
-  # to data space
-  gen = CondGen1D((lbl_shp[1],), dta_shp[1])
-  gen.summary(positions=[0.4, 0.7, 0.8, 1.0])
-
-  # create a little 'packed discriminator model'
-  dis = CondDis1D(dta_shp[1], lbl_shp[1])
-  dis.summary(positions=[0.4, 0.7, 0.8, 1.0])
-
   # package data into dataset
   data = tf.data.Dataset.from_tensor_slices((dtas, lbls))
   data = data.shuffle(ndata).batch(batchsize)
+
+  ## validation data ##
+  val_ndata = 128
+
+  # generate validation simulated data and labels
+  val_dtas,val_lbls = test_data_generator.gen_dataset(val_ndata, plot=False)
+  val_data = tf.data.Dataset.from_tensor_slices((val_dtas, val_lbls))
+  val_data = val_data.batch(val_ndata)
+
+  ### MODEL BUILD ##############################################################
+
+  # create a little 'generator model'
+  gen = CondGen1D((lbl_shp[1],), dta_shp[1])
+  gen.summary(positions=[0.4, 0.7, 0.8, 1.0])
+
+  # create a little 'discriminator model'
+  dis = CondDis1D(dta_shp[1], lbl_shp[1])
+  dis.summary(positions=[0.4, 0.7, 0.8, 1.0])
 
   # create optimizer
   gopt = tf.keras.optimizers.Nadam(learning_rate=1e-5, beta_1=0.9, beta_2=0.99)
@@ -217,16 +261,19 @@ if __name__ == '__main__':
   opt  = GanOptimizer(gopt, dopt)
 
   # create gan
-  gan = CondGan1D(generator=gen, discriminator=dis, pack_dim=pack_dim)
+  gan = CondGan1D(generator=gen, discriminator=dis)
   gan.compile(optimizer=opt)
 
-  # generated data image callback
+  ### generated data image callback ###
   import io
   import numpy as np
   import matplotlib
   matplotlib.use('Agg')
   import matplotlib.pyplot as plt
   class PlotCallback(tf.keras.callbacks.Callback):
+    """
+    plot generated data
+    """
     def __init__(self, log_dir='logs'):
       self.writer = tf.summary.create_file_writer(log_dir + '/gen')
       return
@@ -253,8 +300,8 @@ if __name__ == '__main__':
 
     def on_epoch_end(self, epoch, logs=None):
       # generate 10 example datas
-      x = self.model((dtas[0:10],lbls[0:10]))[0]
-      fig = self.plot_data(x)
+      ((dta,lbl),scr) = self.model(lbls[0:10])
+      fig = self.plot_data(dta)
       img = self.plot_to_image(fig)
       with self.writer.as_default():
         tf.summary.image('GenData', img, step=epoch)
@@ -263,6 +310,7 @@ if __name__ == '__main__':
   # fit gan
   gan.fit(data,
           epochs=10000,
-          verbose=2,
+          verbose=1,
+          validation_data=val_data,
           callbacks=[tf.keras.callbacks.TensorBoard(),
                      PlotCallback()])
