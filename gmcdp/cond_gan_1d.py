@@ -106,39 +106,20 @@ class CondGan1D(Model):
     """
     data augmenation function
     """
-    """
-    ## noisify random data entries
+    ## noisify 10% random data entries
     mask = tf.cast(tf.random.categorical(tf.math.log([[0.9, 0.1]]),
                                          tf.math.reduce_prod(tf.shape(dta))),
                                          tf.float32)
     mask = tf.reshape(mask, shape=tf.shape(dta))
-    nois = tf.random.normal(shape=tf.shape(dta)) * mask
+    nois = tf.random.normal(mean=0.0, stddev=0.5, shape=tf.shape(dta)) * mask
     dta  = dta + nois
-    ## obliterate random data entries
+    ## obliterate 10% random data entries
     mask = tf.cast(tf.random.categorical(tf.math.log([[0.1, 0.9]]),
                                          tf.math.reduce_prod(tf.shape(dta))),
                                          tf.float32)
     mask = tf.reshape(mask, shape=tf.shape(dta))
     dta  = dta * mask
-    """
     return dta
-
-  def pack(self, inputs):
-    """
-    convert generator output for 'packed' discriminator
-    """
-    ## pack data
-    dta = inputs[0] # data  shape is (bs, width)
-    # get new packed batch size
-    dta_shp = tf.shape(dta)
-    bs  = dta_shp[0] // self.pack_dim
-    dw  = dta_shp[1]
-    dta = tf.reshape(dta, shape=(bs,dw,-1))
-    ## pack labels
-    lbl = inputs[1] # label shape is (bs, labels)
-    lw  = tf.shape(lbl)[1]
-    lbl = tf.reshape(lbl, shape=(bs,lw,-1))
-    return (dta,lbl)
 
   def train_step(self, inputs):
     """
@@ -146,20 +127,19 @@ class CondGan1D(Model):
     """
     bs = tf.shape(inputs[0])[0]
 
-    # labels need to take into account discriminator's pack_dim
-    #p_bs  = bs // self.pack_dim
+    # labels
     pones =  tf.ones((bs,1))
     nones = -tf.ones((bs,1))
 
+    # split data and labels
     data = inputs[0]
     lbls = inputs[1]
 
     # train discriminator using real data
     with tf.GradientTape() as tape:
-      #preds   = self.disr(self.pack(self.augment(inputs)))
-      preds   = self.disr((self.augment_data(data),
-                           self.genr(lbls)[0],
-                           lbls))
+      preds = self.disr((self.augment_data(data),
+                         self.genr(lbls)[0],
+                         lbls))
       disr_rl = self.compiled_loss(nones, preds)
     grds = tape.gradient(disr_rl, self.disr.trainable_weights)
     self.optimizer.apply_discriminator_gradients(zip(grds,
@@ -167,11 +147,9 @@ class CondGan1D(Model):
 
     # train discriminator using fake data
     with tf.GradientTape() as tape:
-      #fake_data = self.pack(self.augment(self.genr(inputs[1])))
-      #preds     = self.disr(fake_data)
-      preds   = self.disr((self.augment_data(self.genr(lbls)[0]),
-                           self.genr(lbls)[0],
-                           lbls))
+      preds = self.disr((self.augment_data(self.genr(lbls)[0]),
+                         self.genr(lbls)[0],
+                         lbls))
       disr_fk = self.compiled_loss(pones, preds)
     grds = tape.gradient(disr_fk, self.disr.trainable_weights)
     self.optimizer.apply_discriminator_gradients(zip(grds,
@@ -179,12 +157,9 @@ class CondGan1D(Model):
 
     # train generator
     with tf.GradientTape() as tape:
-      #fake_data = self.pack(self.augment(self.genr(inputs[1])))
-      # calculate discriminator-induced loss
-      #preds     = self.disr(fake_data)
-      preds     = self.disr((self.augment_data(self.genr(lbls)[0]),
-                             self.genr(lbls)[0],
-                             lbls))
+      preds = self.disr((self.augment_data(self.genr(lbls)[0]),
+                         self.genr(lbls)[0],
+                         lbls))
       genr_loss = self.compiled_loss(nones, preds)
     grds = tape.gradient(genr_loss, self.genr.trainable_weights)
     self.optimizer.apply_generator_gradients(zip(grds,
