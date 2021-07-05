@@ -178,6 +178,7 @@ class CondGan1D(Model):
                                 gnr_data=self.genr(lbls)[0],
                                 lbls=lbls,
                                 y=nones)
+      disr_rl = disr_rl + tf.math.reduce_sum(self.disr.losses)
     grds = tape.gradient(disr_rl, self.disr.trainable_weights)
     self.optimizer.apply_discriminator_gradients(zip(grds,
                                                  self.disr.trainable_weights))
@@ -188,6 +189,7 @@ class CondGan1D(Model):
                                 gnr_data=self.genr(lbls)[0],
                                 lbls=lbls,
                                 y=pones)
+      disr_rl = disr_rl + tf.math.reduce_sum(self.disr.losses)
     grds = tape.gradient(disr_fk, self.disr.trainable_weights)
     self.optimizer.apply_discriminator_gradients(zip(grds,
                                                  self.disr.trainable_weights))
