@@ -69,7 +69,11 @@ class DecodeDis(ReluLayer):
     return self.out(x)
 
 
-def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=8):
+def CondDis1D(data_width,
+              label_width,
+              attn_hds=4,
+              nattnblocks=8,
+              l1_penalty=0.01):
   """
   construct a discriminator using functional API
   """
@@ -82,7 +86,9 @@ def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=8):
                             dim=4,
                             heads=attn_hds,
                             name='ma{}'.format(i))(out)
-  out = DecodeDis(width=data_width, name='dec')(out)
+  out = DecodeDis(width=data_width,
+                  kernel_regularizer=tf.keras.regularizers.L1(l1=l1_penalty),
+                  name='dec')(out)
   return Model(inputs=(in1,in2,in3), outputs=out)
 
 
@@ -109,21 +115,6 @@ if __name__ == '__main__':
   gen.summary(positions=[0.4, 0.7, 0.8, 1.0])
   out = gen(lbls)
   print(out)
-
-  """
-  # convert generator output to 'packed' discriminator
-  pack_dim = 4
-  ## pack data
-  dta = out[0] # data  shape is (bs, width)
-  # get new packed batch size
-  bs  = tf.shape(dta)[0] // pack_dim
-  dwd = tf.shape(dta)[1]
-  dta = tf.reshape(dta, shape=(bs,dwd,-1))
-  ## pack labels
-  lbl = out[1] # label shape is (bs, labels)
-  lwd = tf.shape(lbl)[1]
-  lbl = tf.reshape(lbl, shape=(bs,lwd,-1))
-  """
 
   # create a little 'discriminator model'
   dis = CondDis1D(output_shape[1], input_shape[1])
