@@ -106,6 +106,7 @@ class CondGan1D(Model):
     """
     data augmenation function
     """
+    """
     ## noisify 10% random data entries
     mask = tf.cast(tf.random.categorical(tf.math.log([[0.9, 0.1]]),
                                          tf.math.reduce_prod(tf.shape(dta))),
@@ -119,6 +120,7 @@ class CondGan1D(Model):
                                          tf.float32)
     mask = tf.reshape(mask, shape=tf.shape(dta))
     dta  = dta * mask
+    """
     return dta
 
   def _calc_loss(self, qry_data, gnr_data, lbls, y):
