@@ -35,6 +35,7 @@ class DecodeDis(ReluLayer):
     super(DecodeDis, self).__init__(*args, **kwargs)
     # construct
     self.flt = tf.keras.layers.Flatten()
+    """
     self.dn1 = tf.keras.layers.Dense(units=self.width,
                                   use_bias=self.use_bias,
                                   kernel_initializer=self.kernel_initializer,
@@ -51,6 +52,7 @@ class DecodeDis(ReluLayer):
                                   bias_regularizer=self.bias_regularizer,
                                   kernel_constraint=self.kernel_constraint,
                                   bias_constraint=self.bias_constraint)
+    """
     self.out = tf.keras.layers.Dense(units=1,
                                   use_bias=self.use_bias,
                                   kernel_initializer=self.kernel_initializer,
@@ -64,16 +66,12 @@ class DecodeDis(ReluLayer):
 
   def call(self, inputs):
     x = self.flt(inputs)
-    x = tf.nn.leaky_relu(self.dn1(x), alpha=self.relu_alpha)
-    x = tf.nn.leaky_relu(self.dn2(x), alpha=self.relu_alpha)
+    #x = tf.nn.leaky_relu(self.dn1(x), alpha=self.relu_alpha)
+    #x = tf.nn.leaky_relu(self.dn2(x), alpha=self.relu_alpha)
     return self.out(x)
 
 
-def CondDis1D(data_width,
-              label_width,
-              attn_hds=4,
-              nattnblocks=8,
-              l1_penalty=0.01):
+def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=4):
   """
   construct a discriminator using functional API
   """
@@ -86,9 +84,7 @@ def CondDis1D(data_width,
                             dim=4,
                             heads=attn_hds,
                             name='ma{}'.format(i))(out)
-  out = DecodeDis(width=data_width,
-                  kernel_regularizer=tf.keras.regularizers.L1(l1=l1_penalty),
-                  name='dec')(out)
+  out = DecodeDis(width=data_width, name='dec')(out)
   return Model(inputs=(in1,in2,in3), outputs=out)
 
 

@@ -94,12 +94,14 @@ class CondGan1D(Model):
                                **kwargs)
     return
 
-  def call(self, inputs):
+  def call(self, inputs, training=None):
     """
     inputs should be labels
     """
-    gdta,lbls = self.genr(inputs)  # generate data, labels
-    dsr_score = self.disr((gdta, self.genr(inputs)[0], inputs))
+    gdta,lbls = self.genr(inputs, training=training)  # generate data, labels
+    dsr_score = self.disr((gdta,
+                           self.genr(inputs, training=training)[0],
+                           inputs), training=training)
     return ((gdta, lbls), dsr_score)
 
   def augment_data(self, dta):
@@ -123,11 +125,11 @@ class CondGan1D(Model):
     """
     return dta
 
-  def _calc_loss(self, qry_data, gnr_data, lbls, y):
+  def _calc_loss(self, qry_data, gnr_data, lbls, y, training=None):
     """
     calculates appropriate loss function
     """
-    y_hat = self.disr((qry_data, gnr_data, lbls))
+    y_hat = self.disr((qry_data, gnr_data, lbls), training=training)
     return self.compiled_loss(y, y_hat)
 
   def test_step(self, inputs):
@@ -141,19 +143,22 @@ class CondGan1D(Model):
     lbls  = inputs[1]               # input labels
     # discriminator loss on real data
     disr_rl = self._calc_loss(qry_data=data,
-                              gnr_data=self.genr(lbls)[0],
+                              gnr_data=self.genr(lbls, training=False)[0],
                               lbls=lbls,
-                              y=nones)
+                              y=nones,
+                              training=False)
     # discriminator loss on fake data
-    disr_fk = self._calc_loss(qry_data=self.genr(lbls)[0],
-                              gnr_data=self.genr(lbls)[0],
+    disr_fk = self._calc_loss(qry_data=self.genr(lbls, training=False)[0],
+                              gnr_data=self.genr(lbls, training=False)[0],
                               lbls=lbls,
-                              y=pones)
+                              y=pones,
+                              training=False)
     # generator loss
-    genr_ls = self._calc_loss(qry_data=self.genr(lbls)[0],
-                              gnr_data=self.genr(lbls)[0],
+    genr_ls = self._calc_loss(qry_data=self.genr(lbls, training=False)[0],
+                              gnr_data=self.genr(lbls, training=False)[0],
                               lbls=lbls,
-                              y=nones)
+                              y=nones,
+                              training=False)
     return {'disr_rl' : disr_rl,
             'disr_fk' : disr_fk,
             'genr_ls' : genr_ls,}
@@ -175,31 +180,34 @@ class CondGan1D(Model):
     # train discriminator using real data
     with tf.GradientTape() as tape:
       disr_rl = self._calc_loss(qry_data=self.augment_data(data),
-                                gnr_data=self.genr(lbls)[0],
+                                gnr_data=self.genr(lbls, training=False)[0],
                                 lbls=lbls,
-                                y=nones)
-      disr_rl = disr_rl + tf.math.reduce_sum(self.disr.losses)
+                                y=nones,
+                                training=True)
     grds = tape.gradient(disr_rl, self.disr.trainable_weights)
     self.optimizer.apply_discriminator_gradients(zip(grds,
                                                  self.disr.trainable_weights))
 
     # train discriminator using fake data
     with tf.GradientTape() as tape:
-      disr_fk = self._calc_loss(qry_data=self.augment_data(self.genr(lbls)[0]),
-                                gnr_data=self.genr(lbls)[0],
-                                lbls=lbls,
-                                y=pones)
-      disr_rl = disr_rl + tf.math.reduce_sum(self.disr.losses)
+      disr_fk = self._calc_loss(\
+                qry_data=self.augment_data(self.genr(lbls, training=False)[0]),
+                gnr_data=self.genr(lbls, training=False)[0],
+                lbls=lbls,
+                y=pones,
+                training=True)
     grds = tape.gradient(disr_fk, self.disr.trainable_weights)
     self.optimizer.apply_discriminator_gradients(zip(grds,
                                                  self.disr.trainable_weights))
 
     # train generator
     with tf.GradientTape() as tape:
-      genr_ls = self._calc_loss(qry_data=self.augment_data(self.genr(lbls)[0]),
-                                gnr_data=self.genr(lbls)[0],
-                                lbls=lbls,
-                                y=nones)
+      genr_ls = self._calc_loss(\
+                qry_data=self.augment_data(self.genr(lbls, training=True)[0]),
+                gnr_data=self.genr(lbls, training=False)[0],
+                lbls=lbls,
+                y=nones,
+                training=False)
     grds = tape.gradient(genr_ls, self.genr.trainable_weights)
     self.optimizer.apply_generator_gradients(zip(grds,
                                              self.genr.trainable_weights))
