@@ -35,7 +35,6 @@ class DecodeDis(ReluLayer):
     super(DecodeDis, self).__init__(*args, **kwargs)
     # construct
     self.flt = tf.keras.layers.Flatten()
-    """
     self.dn1 = tf.keras.layers.Dense(units=self.width,
                                   use_bias=self.use_bias,
                                   kernel_initializer=self.kernel_initializer,
@@ -52,7 +51,6 @@ class DecodeDis(ReluLayer):
                                   bias_regularizer=self.bias_regularizer,
                                   kernel_constraint=self.kernel_constraint,
                                   bias_constraint=self.bias_constraint)
-    """
     self.out = tf.keras.layers.Dense(units=1,
                                   use_bias=self.use_bias,
                                   kernel_initializer=self.kernel_initializer,
@@ -66,8 +64,8 @@ class DecodeDis(ReluLayer):
 
   def call(self, inputs):
     x = self.flt(inputs)
-    #x = tf.nn.leaky_relu(self.dn1(x), alpha=self.relu_alpha)
-    #x = tf.nn.leaky_relu(self.dn2(x), alpha=self.relu_alpha)
+    x = tf.nn.leaky_relu(self.dn1(x), alpha=self.relu_alpha)
+    x = tf.nn.leaky_relu(self.dn2(x), alpha=self.relu_alpha)
     return self.out(x)
 
 
