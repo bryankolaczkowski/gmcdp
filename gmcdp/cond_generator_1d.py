@@ -280,7 +280,7 @@ class DataNoise(WidthLayer):
   def call(self, inputs):
     bs = tf.shape(inputs)[0]
     mn = self.mean(inputs)          # project noise means
-    sd = self.stdv(inputs) + 1.0e-3 # project noise stdvs
+    sd = self.stdv(inputs) + 1.0e-5 # project noise stdvs
     # generate masked random vector affecting only data dimension
     rv = tf.random.normal(mean=mn,
                           stddev=sd,
@@ -288,14 +288,15 @@ class DataNoise(WidthLayer):
     return inputs + rv
 
 
-class UpsamplBlock(WidthLayer):
+class UpsamplBlock(ReluLayer):
   """
   incremental generator from initial to final data width
   """
-  def __init__(self, init_width, *args, attn_hds=4, **kwargs):
+  def __init__(self, init_width, *args, attn_dim=3, attn_hds=4, **kwargs):
     super(UpsamplBlock, self).__init__(*args, **kwargs)
     # config copy
     self.init_width = init_width
+    self.attn_dim   = attn_dim
     self.attn_hds   = attn_hds
     # construct
     n_upsampl_blks = int(math.log2(self.width) - math.log2(self.init_width))
@@ -303,8 +304,16 @@ class UpsamplBlock(WidthLayer):
     self.mhablocks = []
     for i in range(n_upsampl_blks):
       self.mhablocks.append(PosMaskedMHABlock(width=curr_width,
-                                              dim=3,
-                                              heads=self.attn_hds))
+                                    dim=self.attn_dim,
+                                    heads=self.attn_hds,
+                                    relu_alpha=self.relu_alpha,
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint))
       curr_width *= 2
     self.upsampler = AveUpsample()
     return
@@ -320,6 +329,7 @@ class UpsamplBlock(WidthLayer):
     config = super(UpsamplBlock, self).get_config()
     config.update({
       'init_width' : self.init_width,
+      'attn_dim'   : self.attn_dim,
       'attn_hds'   : self.attn_hds,
     })
     return config
@@ -330,34 +340,23 @@ def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=4):
   """
   construct generator using functional API
   """
+  ATTNDIM=3  # dimension of internal data representation (pos,data,proj)
   ## input encoding
   start_width = 32
   inputs = tf.keras.Input(shape=input_shape, name='lbin')
   output = EncodeGen(width=start_width, name='encd')(inputs)
   ## upsampling subnet
   output = UpsamplBlock(init_width=start_width,
-                        attn_hds=attn_hds,
                         width=width,
+                        attn_dim=ATTNDIM,
+                        attn_hds=attn_hds,
                         name='upsl')(output)
-  """
-  n_upsampl_blks = int(math.log2(width) - math.log2(start_width))
-  curr_width = start_width
-  for i in range(n_upsampl_blks):
-    output = PosMaskedMHABlock(width=curr_width,
-                               dim=3,
-                               heads=attn_hds,
-                               name='mau{}'.format(i))(output)
-    output = AveUpsample(name='ups{}'.format(i))(output)
-    curr_width *= 2
-    output = DataNoise(width=curr_width, name='noi{}'.format(i))(output)
-  """
-
   ## self-attention subnet
   for i in range(nattnblocks):
     output = PosMaskedMHABlock(width=width,
-                              dim=3,
-                              heads=attn_hds,
-                              name='mha{}'.format(i))(output)
+                               dim=ATTNDIM,
+                               heads=attn_hds,
+                               name='mha{}'.format(i))(output)
     if i % 2 == 1 and i != nattnblocks-1:
       output = DataNoise(width=width, name='nse{}'.format(i))(output)
   ## data decoding
