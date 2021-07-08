@@ -289,7 +289,7 @@ class DataNoise(WidthLayer):
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
-def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=2):
+def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=4):
   """
   construct generator using functional API
   """
@@ -314,6 +314,8 @@ def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=2):
                               dim=3,
                               heads=attn_hds,
                               name='mha{}'.format(i))(output)
+    if i == 1:
+      output = DataNoise(width=width, name='nois')(output)
   ## data decoding
   output = DecodeGen(name='decd')(output)
   return Model(inputs=inputs, outputs=(output,inputs))
