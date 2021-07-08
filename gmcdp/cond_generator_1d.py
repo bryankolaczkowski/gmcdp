@@ -314,8 +314,8 @@ def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=4):
                               dim=3,
                               heads=attn_hds,
                               name='mha{}'.format(i))(output)
-    if i == 1:
-      output = DataNoise(width=width, name='nois')(output)
+    if i % 2 == 1 and i != nattnblocks-1:
+      output = DataNoise(width=width, name='nse{}'.format(i))(output)
   ## data decoding
   output = DecodeGen(name='decd')(output)
   return Model(inputs=inputs, outputs=(output,inputs))
