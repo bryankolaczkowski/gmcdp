@@ -287,6 +287,43 @@ class DataNoise(WidthLayer):
                           shape=(bs,self.width,1)) * self.mask
     return inputs + rv
 
+
+class UpsamplBlock(WidthLayer):
+  """
+  incremental generator from initial to final data width
+  """
+  def __init__(self, init_width, *args, attn_hds=4, **kwargs):
+    super(UpsamplBlock, self).__init__(*args, **kwargs)
+    # config copy
+    self.init_width = init_width
+    self.attn_hds   = attn_hds
+    # construct
+    n_upsampl_blks = int(math.log2(self.width) - math.log2(self.init_width))
+    curr_width = self.init_width
+    self.mhablocks = []
+    for i in range(n_upsampl_blks):
+      self.mhablocks.append(PosMaskedMHABlock(width=curr_width,
+                                              dim=3,
+                                              heads=self.attn_hds))
+      curr_width *= 2
+    self.upsampler = AveUpsample()
+    return
+
+  def call(self, inputs):
+    x = inputs
+    for mhablock in self.mhablocks:
+      x = mhablock(x)
+      x = self.upsampler(x)
+    return x
+
+  def get_config(self):
+    config = super(UpsamplBlock, self).get_config()
+    config.update({
+      'init_width' : self.init_width,
+      'attn_hds'   : self.attn_hds,
+    })
+    return config
+
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
 def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=4):
@@ -298,6 +335,11 @@ def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=4):
   inputs = tf.keras.Input(shape=input_shape, name='lbin')
   output = EncodeGen(width=start_width, name='encd')(inputs)
   ## upsampling subnet
+  output = UpsamplBlock(init_width=start_width,
+                        attn_hds=attn_hds,
+                        width=width,
+                        name='upsl')(output)
+  """
   n_upsampl_blks = int(math.log2(width) - math.log2(start_width))
   curr_width = start_width
   for i in range(n_upsampl_blks):
@@ -308,6 +350,8 @@ def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=4):
     output = AveUpsample(name='ups{}'.format(i))(output)
     curr_width *= 2
     output = DataNoise(width=curr_width, name='noi{}'.format(i))(output)
+  """
+
   ## self-attention subnet
   for i in range(nattnblocks):
     output = PosMaskedMHABlock(width=width,
