@@ -253,6 +253,7 @@ class DataNoise(WidthLayer):
   def __init__(self, *args, **kwargs):
     super(DataNoise, self).__init__(*args, **kwargs)
     # construct
+    """
     self.mean = tf.keras.layers.LocallyConnected1D(filters=1,
                                 kernel_size=1,
                                 use_bias=self.use_bias,
@@ -262,6 +263,7 @@ class DataNoise(WidthLayer):
                                 bias_regularizer=self.bias_regularizer,
                                 kernel_constraint=self.kernel_constraint,
                                 bias_constraint=self.bias_constraint)
+    """
     self.stdv = tf.keras.layers.LocallyConnected1D(filters=1,
                                 kernel_size=1,
                                 activation=tf.keras.activations.relu,
@@ -279,10 +281,10 @@ class DataNoise(WidthLayer):
 
   def call(self, inputs):
     bs = tf.shape(inputs)[0]
-    mn = self.mean(inputs)          # project noise means
+    #mn = self.mean(inputs)          # project noise means
     sd = self.stdv(inputs) + 1.0e-5 # project noise stdvs
     # generate masked random vector affecting only data dimension
-    rv = tf.random.normal(mean=mn,
+    rv = tf.random.normal(mean=0.0,
                           stddev=sd,
                           shape=(bs,self.width,1)) * self.mask
     return inputs + rv
