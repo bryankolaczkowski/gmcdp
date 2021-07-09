@@ -318,6 +318,14 @@ class UpsamplBlock(ReluLayer):
                                     bias_constraint=self.bias_constraint))
       curr_width *= 2
     self.upsampler = AveUpsample()
+    self.datanoise = DataNoise(width=curr_width,
+                               use_bias=self.use_bias,
+                               kernel_initializer=self.kernel_initializer,
+                               bias_initializer=self.bias_initializer,
+                               kernel_regularizer=self.kernel_regularizer,
+                               bias_regularizer=self.bias_regularizer,
+                               kernel_constraint=self.kernel_constraint,
+                               bias_constraint=self.bias_constraint)
     return
 
   def call(self, inputs):
@@ -325,7 +333,7 @@ class UpsamplBlock(ReluLayer):
     for mhablock in self.mhablocks:
       x = mhablock(x)
       x = self.upsampler(x)
-    return x
+    return self.datanoise(x)
 
   def get_config(self):
     config = super(UpsamplBlock, self).get_config()
@@ -344,7 +352,7 @@ def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=8):
   """
   ATTNDIM=3  # dimension of internal data representation (pos,data,proj)
   ## input encoding
-  start_width = 32
+  start_width = 64
   inputs = tf.keras.Input(shape=input_shape, name='lbin')
   output = EncodeGen(width=start_width, name='encd')(inputs)
   ## upsampling subnet

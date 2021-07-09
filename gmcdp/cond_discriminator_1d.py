@@ -7,6 +7,7 @@ from tensorflow.keras.layers import Layer
 import tensorflow as tf
 
 from cond_generator_1d import EncodeLayer, ReluLayer, PosMaskedMHABlock
+from wrappers import SpecNorm
 
 
 class EncodeDis(EncodeLayer):
@@ -35,22 +36,22 @@ class DecodeDis(ReluLayer):
     super(DecodeDis, self).__init__(*args, **kwargs)
     # construct
     self.flt = tf.keras.layers.Flatten()
-    self.dn1 = tf.keras.layers.Dense(units=self.width,
+    self.dn1 = SpecNorm(tf.keras.layers.Dense(units=self.width,
                                   use_bias=self.use_bias,
                                   kernel_initializer=self.kernel_initializer,
                                   bias_initializer=self.bias_initializer,
                                   kernel_regularizer=self.kernel_regularizer,
                                   bias_regularizer=self.bias_regularizer,
                                   kernel_constraint=self.kernel_constraint,
-                                  bias_constraint=self.bias_constraint)
-    self.dn2 = tf.keras.layers.Dense(units=self.width,
+                                  bias_constraint=self.bias_constraint))
+    self.dn2 = SpecNorm(tf.keras.layers.Dense(units=self.width,
                                   use_bias=self.use_bias,
                                   kernel_initializer=self.kernel_initializer,
                                   bias_initializer=self.bias_initializer,
                                   kernel_regularizer=self.kernel_regularizer,
                                   bias_regularizer=self.bias_regularizer,
                                   kernel_constraint=self.kernel_constraint,
-                                  bias_constraint=self.bias_constraint)
+                                  bias_constraint=self.bias_constraint))
     self.out = tf.keras.layers.Dense(units=1,
                                   use_bias=self.use_bias,
                                   kernel_initializer=self.kernel_initializer,
