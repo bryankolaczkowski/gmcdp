@@ -247,8 +247,9 @@ if __name__ == '__main__':
   dta_shp = tf.shape(dtas)
 
   # package data into dataset
-  data = tf.data.Dataset.from_tensor_slices((dtas, lbls))
+  data = tf.data.Dataset.from_tensor_slices((dtas, lbls)).cache()
   data = data.shuffle(ndata).batch(batchsize)
+  data = data.prefetch(tf.data.experimental.AUTOTUNE)
 
   ## validation data ##
   val_ndata = 128
@@ -256,7 +257,8 @@ if __name__ == '__main__':
   # generate validation simulated data and labels
   val_dtas,val_lbls = test_data_generator.gen_dataset(val_ndata, plot=False)
   val_data = tf.data.Dataset.from_tensor_slices((val_dtas, val_lbls))
-  val_data = val_data.batch(val_ndata)
+  val_data = val_data.batch(val_ndata).cache()
+  val_data = val_data.prefetch(tf.data.experimental.AUTOTUNE)
 
   ### MODEL BUILD ##############################################################
 
