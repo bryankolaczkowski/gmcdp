@@ -269,8 +269,10 @@ if __name__ == '__main__':
   dis.summary(positions=[0.4, 0.7, 0.8, 1.0])
 
   # create optimizer
-  gopt = tf.keras.optimizers.Nadam(learning_rate=1e-5, beta_1=0.9, beta_2=0.99)
-  dopt = tf.keras.optimizers.Nadam(learning_rate=1e-6, beta_1=0.9, beta_2=0.99)
+  glr  = 1e-4
+  dlr  = glr * 4
+  gopt = tf.keras.optimizers.Nadam(learning_rate=glr, beta_1=0.8, beta_2=0.9)
+  dopt = tf.keras.optimizers.Nadam(learning_rate=dlr, beta_1=0.8, beta_2=0.9)
   opt  = GanOptimizer(gopt, dopt)
 
   # create gan
