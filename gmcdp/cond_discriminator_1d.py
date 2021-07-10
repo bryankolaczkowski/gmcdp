@@ -19,13 +19,14 @@ class EncodeDis(EncodeLayer):
     return
 
   def call(self, inputs):
-    dt1 = inputs[0]   # data - real or fake?
-    dt2 = inputs[1]   # data - definitely fake
-    lbl = inputs[2]   # labels
-    bs  = tf.shape(lbl)[0]
-    pse = tf.tile(self.pos, multiples=(bs,1))   # sequence position encoding
+    dt1 = tf.expand_dims(inputs[0], axis=-1)    # data - real or fake?
+    dt2 = tf.expand_dims(inputs[1], axis=-1)    # data - definitely fake
+    lbl = inputs[2]                             # labels
+    bs  = tf.shape(lbl)[0]                      # batch size
+    pse = tf.tile(self.pos, multiples=(bs,1,1)) # sequence position encoding
     lpl = self.lpr(self.flt(lbl))               # linear project labels
-    return tf.stack((pse, lpl, dt2, dt1), axis=-1)
+    lpl = tf.reshape(lpl, shape=(bs,self.width,self.dim))
+    return tf.concat((pse, lpl, dt2, dt1), axis=-1)
 
 
 class DecodeDis(ReluLayer):
@@ -70,17 +71,18 @@ class DecodeDis(ReluLayer):
     return self.out(x)
 
 
-def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=8):
+def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=4, lbldim=2):
   """
   construct a discriminator using functional API
   """
+  datadim = lbldim + 3
   in1 = tf.keras.Input(shape=(data_width,),  name='in1')
   in2 = tf.keras.Input(shape=(data_width,),  name='in2')
   in3 = tf.keras.Input(shape=(label_width,), name='in3')
-  out = EncodeDis(width=data_width, name='enc')((in1,in2,in3))
+  out = EncodeDis(width=data_width, dim=lbldim+1, name='enc')((in1,in2,in3))
   for i in range(nattnblocks):
     out = PosMaskedMHABlock(width=data_width,
-                            dim=4,
+                            dim=datadim,
                             heads=attn_hds,
                             name='ma{}'.format(i))(out)
   out = DecodeDis(width=data_width, name='dec')(out)

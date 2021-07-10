@@ -7,6 +7,17 @@ from tensorflow.keras.layers import Layer
 import tensorflow as tf
 import math
 
+@tf.function
+def gnact(x, alpha=0.2):
+  """
+  2-sided rectified linear activation
+  out = x for abs(x) <= 1-alpha
+  out = x * alpha otherwise
+  """
+  v = 1.0 - alpha
+  m = tf.cast(tf.math.greater(tf.math.abs(x), v), tf.float32) * -v + 1
+  return x * m
+
 ## BASE CLASSES ################################################################
 
 class ConfigLayer(Layer):
@@ -87,12 +98,15 @@ class EncodeLayer(WidthLayer):
   """
   base class for position and linear projection encoding layers
   """
-  def __init__(self, *args, **kwargs):
+  def __init__(self, dim, *args, **kwargs):
     super(EncodeLayer, self).__init__(*args, **kwargs)
+    # config copy
+    self.dim = dim-1
     # construct
-    self.pos = tf.expand_dims(tf.linspace(+1.0, -1.0, self.width), axis=0)
+    self.pos = tf.linspace(+1.0, -1.0, self.width)
+    self.pos = tf.expand_dims(tf.expand_dims(self.pos, axis=-1), axis=0)
     self.flt = tf.keras.layers.Flatten()
-    self.lpr = tf.keras.layers.Dense(units=self.width,
+    self.lpr = tf.keras.layers.Dense(units=self.width * self.dim,
                                   use_bias=self.use_bias,
                                   kernel_initializer=self.kernel_initializer,
                                   bias_initializer=self.bias_initializer,
@@ -101,6 +115,13 @@ class EncodeLayer(WidthLayer):
                                   kernel_constraint=self.kernel_constraint,
                                   bias_constraint=self.bias_constraint)
     return
+
+  def get_config(self):
+    config = super(EncodeLayer, self).get_config()
+    config.update({
+      'dim' : self.dim,
+    })
+    return config
 
 ## ENCODER CLASSES #############################################################
 
@@ -110,24 +131,15 @@ class EncodeGen(EncodeLayer):
   """
   def __init__(self, *args, **kwargs):
     super(EncodeGen, self).__init__(*args, **kwargs)
-    # construct
-    self.lp2 = tf.keras.layers.Dense(units=self.width,
-                                  use_bias=self.use_bias,
-                                  kernel_initializer=self.kernel_initializer,
-                                  bias_initializer=self.bias_initializer,
-                                  kernel_regularizer=self.kernel_regularizer,
-                                  bias_regularizer=self.bias_regularizer,
-                                  kernel_constraint=self.kernel_constraint,
-                                  bias_constraint=self.bias_constraint)
     return
 
   def call(self, inputs):
     bs = tf.shape(inputs)[0]
-    ps = tf.tile(self.pos, multiples=(bs,1))    # sequence position encoding
+    ps = tf.tile(self.pos, multiples=(bs,1,1))  # sequence position encoding
     ip = self.flt(inputs)                       # flatten inputs
-    lp = self.lpr(ip)                           # linear project labels
-    dt = self.lp2(ip)                           # linear project data
-    return tf.stack((ps, lp, dt), axis=-1)
+    lp = self.lpr(ip)                           # linear projections
+    lp = tf.reshape(lp, shape=(bs,self.width,self.dim))
+    return tf.concat((ps, lp), axis=-1)
 
 
 class DecodeGen(ConfigLayer):
@@ -137,8 +149,18 @@ class DecodeGen(ConfigLayer):
   def __init__(self, *args, **kwargs):
     super(DecodeGen, self).__init__(*args, **kwargs)
     # construct
+    """
     self.lpr = tf.keras.layers.LocallyConnected1D(filters=1,
                                     kernel_size=1,
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
+    """
+    self.lpr = tf.keras.layers.Dense(units=1,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
                                     bias_initializer=self.bias_initializer,
@@ -214,8 +236,8 @@ class PosMaskedMHABlock(ReluLayer):
     a = self.ln1(self.mha(inputs,inputs))
     a = inputs + (a * self.msk)
     # sub-block 2 - feed-forward with residual connection
-    b = tf.nn.leaky_relu(self.ff1(a), alpha=self.relu_alpha)
-    b = tf.nn.leaky_relu(self.ff2(b), alpha=self.relu_alpha)
+    b = gnact(self.ff1(a), alpha=self.relu_alpha)
+    b = gnact(self.ff2(b), alpha=self.relu_alpha)
     b = self.ln2(self.lpr(b))
     b = a + (b * self.msk)
     return b
@@ -250,8 +272,10 @@ class DataNoise(WidthLayer):
   """
   adaptive noise injection into data
   """
-  def __init__(self, *args, **kwargs):
+  def __init__(self, dim, *args, **kwargs):
     super(DataNoise, self).__init__(*args, **kwargs)
+    # config copy
+    self.dim = dim
     # construct
     """
     self.mean = tf.keras.layers.LocallyConnected1D(filters=1,
@@ -274,20 +298,29 @@ class DataNoise(WidthLayer):
                                 bias_regularizer=self.bias_regularizer,
                                 kernel_constraint=self.kernel_constraint,
                                 bias_constraint=self.bias_constraint)
-    self.mask = tf.stack((tf.zeros(shape=(1,self.width)),
-                          tf.zeros(shape=(1,self.width)),
-                           tf.ones(shape=(1,self.width))), axis=-1)
+    msks = []
+    for i in range(dim-1):
+      msks.append(tf.zeros(shape=(1,self.width)))
+    msks.append(tf.ones(shape=(1,self.width)))
+    self.mask = tf.stack(msks, axis=-1)
     return
 
   def call(self, inputs):
     bs = tf.shape(inputs)[0]
     #mn = self.mean(inputs)          # project noise means
     sd = self.stdv(inputs) + 1.0e-5 # project noise stdvs
-    # generate masked random vector affecting only data dimension
+    # generate masked random vector affecting only last data dimension
     rv = tf.random.normal(mean=0.0,
                           stddev=sd,
                           shape=(bs,self.width,1)) * self.mask
     return inputs + rv
+
+  def get_config(self):
+    config = super(EncodeLayer, self).get_config()
+    config.update({
+      'dim' : self.dim,
+    })
+    return config
 
 
 class UpsamplBlock(ReluLayer):
@@ -319,6 +352,7 @@ class UpsamplBlock(ReluLayer):
       curr_width *= 2
     self.upsampler = AveUpsample()
     self.datanoise = DataNoise(width=curr_width,
+                               dim=self.attn_dim,
                                use_bias=self.use_bias,
                                kernel_initializer=self.kernel_initializer,
                                bias_initializer=self.bias_initializer,
@@ -346,29 +380,30 @@ class UpsamplBlock(ReluLayer):
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
-def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=8):
+def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=4, datadim=4):
   """
   construct generator using functional API
   """
-  ATTNDIM=3  # dimension of internal data representation (pos,data,proj)
   ## input encoding
   start_width = 64
   inputs = tf.keras.Input(shape=input_shape, name='lbin')
-  output = EncodeGen(width=start_width, name='encd')(inputs)
+  output = EncodeGen(width=start_width, dim=datadim, name='encd')(inputs)
   ## upsampling subnet
   output = UpsamplBlock(init_width=start_width,
                         width=width,
-                        attn_dim=ATTNDIM,
+                        attn_dim=datadim,
                         attn_hds=attn_hds,
                         name='upsl')(output)
   ## self-attention subnet
   for i in range(nattnblocks):
     output = PosMaskedMHABlock(width=width,
-                               dim=ATTNDIM,
+                               dim=datadim,
                                heads=attn_hds,
                                name='mha{}'.format(i))(output)
     if i % 2 == 1 and i != nattnblocks-1:
-      output = DataNoise(width=width, name='nse{}'.format(i))(output)
+      output = DataNoise(width=width,
+                         dim=datadim,
+                         name='nse{}'.format(i))(output)
   ## data decoding
   output = DecodeGen(name='decd')(output)
   return Model(inputs=inputs, outputs=(output,inputs))
