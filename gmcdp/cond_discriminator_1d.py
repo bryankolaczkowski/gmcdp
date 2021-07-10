@@ -7,6 +7,7 @@ from tensorflow.keras.layers import Layer
 import tensorflow as tf
 
 from cond_generator_1d import EncodeLayer, ReluLayer, PosMaskedMHABlock
+from cond_generator_1d import gnact
 from wrappers import SpecNorm
 
 

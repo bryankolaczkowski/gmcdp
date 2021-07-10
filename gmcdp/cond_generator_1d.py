@@ -10,13 +10,18 @@ import math
 @tf.function
 def gnact(x, alpha=0.2):
   """
-  2-sided rectified linear activation
-  out = x for abs(x) <= 1-alpha
-  out = x * alpha otherwise
+  2-sided 'leaky-rectified' linear activation
+  scales x by alpha*x whenever |x| > (1-alpha)
   """
-  v = 1.0 - alpha
-  m = tf.cast(tf.math.greater(tf.math.abs(x), v), tf.float32) * -v + 1
-  return x * m
+  v  = 1.0 - alpha
+  b  = v * v
+  # leaky-rectify positive values
+  c = tf.math.greater(x, v)
+  r = tf.where(c, alpha*x+b, x)
+  # leaky-rectify negative values
+  c = tf.math.less(r, -v)
+  r = tf.where(c, alpha*r-b, r)
+  return r
 
 ## BASE CLASSES ################################################################
 
