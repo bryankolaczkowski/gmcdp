@@ -67,8 +67,8 @@ class DecodeDis(ReluLayer):
 
   def call(self, inputs):
     x = self.flt(inputs)
-    x = tf.nn.leaky_relu(self.dn1(x), alpha=self.relu_alpha)
-    x = tf.nn.leaky_relu(self.dn2(x), alpha=self.relu_alpha)
+    x = gnact(self.dn1(x), alpha=self.relu_alpha)
+    x = gnact(self.dn2(x), alpha=self.relu_alpha)
     return self.out(x)
 
 
