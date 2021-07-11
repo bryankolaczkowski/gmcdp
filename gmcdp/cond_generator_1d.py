@@ -8,7 +8,7 @@ import tensorflow as tf
 import math
 
 @tf.function
-def gnact(x, alpha=0.2):
+def gnact(x, alpha=0.4):
   """
   2-sided 'leaky-rectified' linear activation
   scales x by alpha*x whenever |x| > (1-alpha)
@@ -85,7 +85,7 @@ class ReluLayer(WidthLayer):
   """
   base class for layers with leaky-ReLU activations
   """
-  def __init__(self, relu_alpha=0.2, *args, **kwargs):
+  def __init__(self, relu_alpha=0.4, *args, **kwargs):
     super(ReluLayer, self).__init__(*args, **kwargs)
     # config copy
     self.relu_alpha = relu_alpha
@@ -128,7 +128,7 @@ class EncodeLayer(WidthLayer):
     })
     return config
 
-## ENCODER CLASSES #############################################################
+## GENERATOR CLASSES ###########################################################
 
 class EncodeGen(EncodeLayer):
   """
@@ -154,7 +154,6 @@ class DecodeGen(ConfigLayer):
   def __init__(self, *args, **kwargs):
     super(DecodeGen, self).__init__(*args, **kwargs)
     # construct
-    """
     self.lpr = tf.keras.layers.LocallyConnected1D(filters=1,
                                     kernel_size=1,
                                     use_bias=self.use_bias,
@@ -173,6 +172,7 @@ class DecodeGen(ConfigLayer):
                                     bias_regularizer=self.bias_regularizer,
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
+    """
     self.flt = tf.keras.layers.Flatten()
     return
 
