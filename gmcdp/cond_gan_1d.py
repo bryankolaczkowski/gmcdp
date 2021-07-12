@@ -270,7 +270,7 @@ if __name__ == '__main__':
 
   # create optimizer
   glr  = 1e-6
-  dlr  = glr * 0.01
+  dlr  = glr * 0.1
   gopt = tf.keras.optimizers.Nadam(learning_rate=glr, beta_1=0.5, beta_2=0.8)
   dopt = tf.keras.optimizers.Nadam(learning_rate=dlr, beta_1=0.5, beta_2=0.8)
   opt  = GanOptimizer(gopt, dopt)
