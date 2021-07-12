@@ -147,13 +147,14 @@ class EncodeGen(EncodeLayer):
     return tf.concat((ps, lp), axis=-1)
 
 
-class DecodeGen(ConfigLayer):
+class DecodeGen(ReluLayer):
   """
   decodes generator output to data
   """
   def __init__(self, *args, **kwargs):
     super(DecodeGen, self).__init__(*args, **kwargs)
     # construct
+    """
     self.lpr = tf.keras.layers.LocallyConnected1D(filters=1,
                                     kernel_size=1,
                                     use_bias=self.use_bias,
@@ -164,7 +165,7 @@ class DecodeGen(ConfigLayer):
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
     """
-    self.lpr = tf.keras.layers.Dense(units=1,
+    self.dpr = tf.keras.layers.Dense(units=1,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
                                     bias_initializer=self.bias_initializer,
@@ -172,12 +173,29 @@ class DecodeGen(ConfigLayer):
                                     bias_regularizer=self.bias_regularizer,
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
-    """
+    self.hdn = tf.keras.layers.Dense(units=self.width,
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
+    self.out = tf.keras.layers.Dense(units=self.width,
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
     self.flt = tf.keras.layers.Flatten()
     return
 
   def call(self, inputs):
-    return self.flt(self.lpr(inputs))
+    x = self.flt(gnact(self.dpr(inputs), alpha=self.relu_alpha))
+    x =          gnact(self.hdn(x),      alpha=self.relu_alpha)
+    return self.out(x)
 
 
 class PosMaskedMHABlock(ReluLayer):
@@ -405,12 +423,12 @@ def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=4, datadim=4):
                                dim=datadim,
                                heads=attn_hds,
                                name='mha{}'.format(i))(output)
-    if i % 2 == 1 and i != nattnblocks-1:
+    if i % 2 == 1:
       output = DataNoise(width=width,
                          dim=datadim,
                          name='nse{}'.format(i))(output)
   ## data decoding
-  output = DecodeGen(name='decd')(output)
+  output = DecodeGen(width=width, name='decd')(output)
   return Model(inputs=inputs, outputs=(output,inputs))
 
 
