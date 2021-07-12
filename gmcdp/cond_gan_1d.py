@@ -269,7 +269,7 @@ if __name__ == '__main__':
   dis.summary(positions=[0.4, 0.7, 0.8, 1.0])
 
   # create optimizer
-  glr  = 1e-4
+  glr  = 1e-5
   dlr  = glr * 0.01
   gopt = tf.keras.optimizers.Nadam(learning_rate=glr, beta_1=0.5, beta_2=0.8)
   dopt = tf.keras.optimizers.Nadam(learning_rate=dlr, beta_1=0.5, beta_2=0.8)
