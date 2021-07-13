@@ -108,7 +108,7 @@ class EncodeLayer(WidthLayer):
     # config copy
     self.dim = dim-1
     # construct
-    self.pos = tf.linspace(+1.0, -1.0, self.width)
+    self.pos = tf.linspace(+2.0, -2.0, self.width)
     self.pos = tf.expand_dims(tf.expand_dims(self.pos, axis=-1), axis=0)
     self.flt = tf.keras.layers.Flatten()
     self.lpr = tf.keras.layers.Dense(units=self.width * self.dim,
@@ -154,17 +154,6 @@ class DecodeGen(ReluLayer):
   def __init__(self, *args, **kwargs):
     super(DecodeGen, self).__init__(*args, **kwargs)
     # construct
-    """
-    self.lpr = tf.keras.layers.LocallyConnected1D(filters=1,
-                                    kernel_size=1,
-                                    use_bias=self.use_bias,
-                                    kernel_initializer=self.kernel_initializer,
-                                    bias_initializer=self.bias_initializer,
-                                    kernel_regularizer=self.kernel_regularizer,
-                                    bias_regularizer=self.bias_regularizer,
-                                    kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint)
-    """
     self.dpr = tf.keras.layers.Dense(units=1,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
@@ -403,7 +392,7 @@ class UpsamplBlock(ReluLayer):
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
-def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=4, datadim=4):
+def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=8, datadim=4):
   """
   construct generator using functional API
   """
