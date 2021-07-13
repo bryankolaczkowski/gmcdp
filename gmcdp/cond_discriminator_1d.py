@@ -72,7 +72,7 @@ class DecodeDis(ReluLayer):
     return self.out(x)
 
 
-def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=4, lbldim=2):
+def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=8, lbldim=2):
   """
   construct a discriminator using functional API
   """
