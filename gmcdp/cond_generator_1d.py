@@ -7,6 +7,9 @@ from tensorflow.keras.layers import Layer
 import tensorflow as tf
 import math
 
+from wrappers import SpecNorm
+
+
 @tf.function
 def gnact(x, alpha=0.4):
   """
@@ -162,14 +165,14 @@ class DecodeGen(ReluLayer):
                                     bias_regularizer=self.bias_regularizer,
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
-    self.hdn = tf.keras.layers.Dense(units=self.width,
+    self.hdn = SpecNorm(tf.keras.layers.Dense(units=self.width,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
                                     bias_initializer=self.bias_initializer,
                                     kernel_regularizer=self.kernel_regularizer,
                                     bias_regularizer=self.bias_regularizer,
                                     kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint)
+                                    bias_constraint=self.bias_constraint))
     self.out = tf.keras.layers.Dense(units=self.width,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
