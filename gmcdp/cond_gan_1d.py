@@ -271,8 +271,8 @@ if __name__ == '__main__':
   # create optimizer
   glr  = 1e-6
   dlr  = glr * 0.1
-  gopt = tf.keras.optimizers.Nadam(learning_rate=glr, beta_1=0.4, beta_2=0.5)
-  dopt = tf.keras.optimizers.Nadam(learning_rate=dlr, beta_1=0.4, beta_2=0.5)
+  gopt = tf.keras.optimizers.SGD(learning_rate=glr, momentum=0.0, nesterov=True)
+  dopt = tf.keras.optimizers.SGD(learning_rate=dlr, momentum=0.0, nesterov=True)
   opt  = GanOptimizer(gopt, dopt)
 
   # create gan
