@@ -157,6 +157,15 @@ class DecodeGen(WidthLayer):
   def __init__(self, *args, **kwargs):
     super(DecodeGen, self).__init__(*args, **kwargs)
     # construct
+    self.out = tf.keras.layers.Dense(units=1,
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
+    """
     self.out = tf.keras.layers.LocallyConnected1D(filters=1,
                                     kernel_size=1,
                                     use_bias=self.use_bias,
@@ -166,6 +175,7 @@ class DecodeGen(WidthLayer):
                                     bias_regularizer=self.bias_regularizer,
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
+    """
     self.flt = tf.keras.layers.Flatten()
     return
 
