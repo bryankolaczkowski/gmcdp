@@ -33,25 +33,21 @@ class GanOptimizer(Optimizer):
   implements a generator,discriminator optimizer pair
   """
   def __init__(self,
-               learning_rate=1.0e-4,
+               learning_rate=1.0e-5,
                dis_lr_mult=0.1,
                gen_optimizer='adam',
                dis_optimizer='adam',
                **kwargs):
     super(GanOptimizer, self).__init__(name='GanOptimizer', **kwargs)
-    self.__dict__['learning_rate'] = learning_rate
-    self.__dict__['dis_lr_mult']   = dis_lr_mult
     self.__dict__['gen_optimizer'] = optimizers.get(gen_optimizer)
     self.__dict__['dis_optimizer'] = optimizers.get(dis_optimizer)
-    #self.gen_optimizer = optimizers.get(gen_optimizer)
-    #self.dis_optimizer = optimizers.get(dis_optimizer)
-    self.gen_optimizer.learning_rate = self.learning_rate
-    self.dis_optimizer.learning_rate = self.learning_rate * self.dis_lr_mult
+    self.__dict__['dis_lr_mult']   = dis_lr_mult
+    self.learning_rate             = learning_rate
     return
 
   def __setattr__(self, name, value):
     super(GanOptimizer, self).__setattr__(name, value)
-    if name == 'lr' or name == 'learning_rate':
+    if name == 'learning_rate' or name == 'lr':
       self.gen_optimizer.__setattr__(name, value)
       self.dis_optimizer.__setattr__(name, value * self.dis_lr_mult)
     return
