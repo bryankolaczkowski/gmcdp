@@ -33,12 +33,27 @@ class GanOptimizer(Optimizer):
   implements a generator,discriminator optimizer pair
   """
   def __init__(self,
+               learning_rate=1.0e-4,
+               dis_lr_mult=0.1,
                gen_optimizer='adam',
                dis_optimizer='adam',
                **kwargs):
     super(GanOptimizer, self).__init__(name='GanOptimizer', **kwargs)
-    self.gen_optimizer = optimizers.get(gen_optimizer)
-    self.dis_optimizer = optimizers.get(dis_optimizer)
+    self.__dict__['learning_rate'] = learning_rate
+    self.__dict__['dis_lr_mult']   = dis_lr_mult
+    self.__dict__['gen_optimizer'] = optimizers.get(gen_optimizer)
+    self.__dict__['dis_optimizer'] = optimizers.get(dis_optimizer)
+    #self.gen_optimizer = optimizers.get(gen_optimizer)
+    #self.dis_optimizer = optimizers.get(dis_optimizer)
+    self.gen_optimizer.learning_rate = self.learning_rate
+    self.dis_optimizer.learning_rate = self.learning_rate * self.dis_lr_mult
+    return
+
+  def __setattr__(self, name, value):
+    super(GanOptimizer, self).__setattr__(name, value)
+    if name == 'lr' or name == 'learning_rate':
+      self.gen_optimizer.__setattr__(name, value)
+      self.dis_optimizer.__setattr__(name, value * self.dis_lr_mult)
     return
 
   def apply_gradients(self, grads_and_vars,
@@ -269,11 +284,11 @@ if __name__ == '__main__':
   dis.summary(positions=[0.4, 0.7, 0.8, 1.0])
 
   # create optimizer
-  glr  = 1e-5
-  dlr  = glr * 0.1
-  gopt = tf.keras.optimizers.SGD(learning_rate=glr, momentum=0.9, nesterov=True)
-  dopt = tf.keras.optimizers.SGD(learning_rate=dlr, momentum=0.9, nesterov=True)
-  opt  = GanOptimizer(gopt, dopt)
+  glr  = 1e-6
+  dlrm = 0.1
+  gopt = tf.keras.optimizers.SGD(momentum=0.9, nesterov=True)
+  dopt = tf.keras.optimizers.SGD(momentum=0.9, nesterov=True)
+  opt  = GanOptimizer(glr, dlrm, gopt, dopt)
 
   # create gan
   gan = CondGan1D(generator=gen, discriminator=dis)
