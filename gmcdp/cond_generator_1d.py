@@ -165,14 +165,6 @@ class DecodeGen(ReluLayer):
                                     bias_regularizer=self.bias_regularizer,
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
-    self.hdn = SpecNorm(tf.keras.layers.Dense(units=self.width,
-                                    use_bias=self.use_bias,
-                                    kernel_initializer=self.kernel_initializer,
-                                    bias_initializer=self.bias_initializer,
-                                    kernel_regularizer=self.kernel_regularizer,
-                                    bias_regularizer=self.bias_regularizer,
-                                    kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint))
     self.out = tf.keras.layers.Dense(units=self.width,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
@@ -186,9 +178,7 @@ class DecodeGen(ReluLayer):
 
   def call(self, inputs):
     x = self.flt(gnact(self.dpr(inputs), alpha=self.relu_alpha))
-    x =          gnact(self.hdn(x),      alpha=self.relu_alpha)
-    x =          gnact(self.out(x),      alpha=self.relu_alpha)
-    return x
+    return self.out(x)
 
 
 class PosMaskedMHABlock(ReluLayer):
@@ -245,8 +235,7 @@ class PosMaskedMHABlock(ReluLayer):
     # sub-block 2 - feed-forward with residual connection
     b = self.ln2(gnact(self.ff1(a), alpha=self.relu_alpha))
     b =          gnact(self.ff2(b), alpha=self.relu_alpha)
-    #b = a + (b * self.msk)
-    b = a + b
+    b = a + (b * self.msk)
     return b
 
   def get_config(self):
@@ -375,7 +364,7 @@ class UpsamplBlock(ReluLayer):
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
-def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=8, datadim=4):
+def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=4, datadim=8):
   """
   construct generator using functional API
   """
