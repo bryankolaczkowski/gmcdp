@@ -269,8 +269,8 @@ if __name__ == '__main__':
   dis.summary(positions=[0.4, 0.7, 0.8, 1.0])
 
   # create optimizer
-  glr  = 1e-6
-  dlr  = glr * 10.0
+  glr  = 1e-4
+  dlr  = glr * 0.1
   gopt = tf.keras.optimizers.SGD(learning_rate=glr, momentum=0.9, nesterov=True)
   dopt = tf.keras.optimizers.SGD(learning_rate=dlr, momentum=0.9, nesterov=True)
   opt  = GanOptimizer(gopt, dopt)
