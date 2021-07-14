@@ -111,7 +111,7 @@ class EncodeLayer(WidthLayer):
     # config copy
     self.dim = dim-1
     # construct
-    self.pos = tf.linspace(+1.0, -1.0, self.width)
+    self.pos = tf.linspace(+2.0, -2.0, self.width)
     self.pos = tf.expand_dims(tf.expand_dims(self.pos, axis=-1), axis=0)
     self.flt = tf.keras.layers.Flatten()
     self.lpr = SpecNorm(tf.keras.layers.Dense(units=self.width * self.dim,
@@ -283,17 +283,6 @@ class DataNoise(WidthLayer):
     # config copy
     self.dim = dim
     # construct
-    """
-    self.mean = tf.keras.layers.LocallyConnected1D(filters=1,
-                                kernel_size=1,
-                                use_bias=self.use_bias,
-                                kernel_initializer=tf.keras.initializers.zeros,
-                                bias_initializer=tf.keras.initializers.zeros,
-                                kernel_regularizer=self.kernel_regularizer,
-                                bias_regularizer=self.bias_regularizer,
-                                kernel_constraint=self.kernel_constraint,
-                                bias_constraint=self.bias_constraint)
-    """
     self.stdv = tf.keras.layers.LocallyConnected1D(filters=1,
                                 kernel_size=1,
                                 activation=tf.keras.activations.relu,
@@ -313,7 +302,6 @@ class DataNoise(WidthLayer):
 
   def call(self, inputs):
     bs = tf.shape(inputs)[0]
-    #mn = self.mean(inputs)          # project noise means
     sd = self.stdv(inputs) + 1.0e-5 # project noise stdvs
     # generate masked random vector affecting only last data dimension
     rv = tf.random.normal(mean=0.0,
@@ -386,7 +374,7 @@ class UpsamplBlock(ReluLayer):
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
-def CondGen1D(input_shape, width, attn_hds=2, nattnblocks=8, datadim=4):
+def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=8, datadim=4):
   """
   construct generator using functional API
   """
