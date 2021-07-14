@@ -54,14 +54,14 @@ class DecodeDis(ReluLayer):
                                   bias_regularizer=self.bias_regularizer,
                                   kernel_constraint=self.kernel_constraint,
                                   bias_constraint=self.bias_constraint))
-    self.out = tf.keras.layers.Dense(units=1,
+    self.out = SpecNorm(tf.keras.layers.Dense(units=1,
                                   use_bias=self.use_bias,
                                   kernel_initializer=self.kernel_initializer,
                                   bias_initializer=self.bias_initializer,
                                   kernel_regularizer=self.kernel_regularizer,
                                   bias_regularizer=self.bias_regularizer,
                                   kernel_constraint=self.kernel_constraint,
-                                  bias_constraint=self.bias_constraint)
+                                  bias_constraint=self.bias_constraint))
 
     return
 
@@ -69,10 +69,11 @@ class DecodeDis(ReluLayer):
     x = self.flt(inputs)
     x = gnact(self.dn1(x), alpha=self.relu_alpha)
     x = gnact(self.dn2(x), alpha=self.relu_alpha)
-    return self.out(x)
+    x = gnact(self.out(x), alpha=self.relu_alpha)
+    return x
 
 
-def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=4, lbldim=2):
+def CondDis1D(data_width, label_width, attn_hds=2, nattnblocks=8, lbldim=2):
   """
   construct a discriminator using functional API
   """
