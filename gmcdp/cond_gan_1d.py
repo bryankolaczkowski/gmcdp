@@ -280,7 +280,7 @@ if __name__ == '__main__':
   dis.summary(positions=[0.4, 0.7, 0.8, 1.0])
 
   # create optimizer
-  glr  = 1e-4
+  glr  = 1e-5
   dlrm = 0.1
   gopt = tf.keras.optimizers.SGD(momentum=0.9, nesterov=True)
   dopt = tf.keras.optimizers.SGD(momentum=0.9, nesterov=True)
