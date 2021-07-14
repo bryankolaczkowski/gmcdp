@@ -245,7 +245,8 @@ class PosMaskedMHABlock(ReluLayer):
     # sub-block 2 - feed-forward with residual connection
     b = self.ln2(gnact(self.ff1(a), alpha=self.relu_alpha))
     b =          gnact(self.ff2(b), alpha=self.relu_alpha)
-    b = a + (b * self.msk)
+    #b = a + (b * self.msk)
+    b = a + b
     return b
 
   def get_config(self):
