@@ -157,14 +157,14 @@ class DecodeGen(ReluLayer):
   def __init__(self, *args, **kwargs):
     super(DecodeGen, self).__init__(*args, **kwargs)
     # construct
-    self.dpr = SpecNorm(tf.keras.layers.Dense(units=1,
+    self.dpr = tf.keras.layers.Dense(units=1,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
                                     bias_initializer=self.bias_initializer,
                                     kernel_regularizer=self.kernel_regularizer,
                                     bias_regularizer=self.bias_regularizer,
                                     kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint))
+                                    bias_constraint=self.bias_constraint)
     self.hdn = SpecNorm(tf.keras.layers.Dense(units=self.width,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
@@ -212,40 +212,25 @@ class PosMaskedMHABlock(ReluLayer):
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
     # feed-forward layers
-    self.ff1 = SpecNorm(tf.keras.layers.Dense(units=self.dim,
+    self.ff1 = tf.keras.layers.Dense(units=self.dim,
                                      use_bias=self.use_bias,
                                      kernel_initializer=self.kernel_initializer,
                                      bias_initializer=self.bias_initializer,
                                      kernel_regularizer=self.kernel_regularizer,
                                      bias_regularizer=self.bias_regularizer,
                                      kernel_constraint=self.kernel_constraint,
-                                     bias_constraint=self.bias_constraint))
-    self.ff2 = SpecNorm(tf.keras.layers.Dense(units=self.dim,
+                                     bias_constraint=self.bias_constraint)
+    self.ff2 = tf.keras.layers.Dense(units=self.dim,
                                      use_bias=self.use_bias,
                                      kernel_initializer=self.kernel_initializer,
                                      bias_initializer=self.bias_initializer,
                                      kernel_regularizer=self.kernel_regularizer,
                                      bias_regularizer=self.bias_regularizer,
                                      kernel_constraint=self.kernel_constraint,
-                                     bias_constraint=self.bias_constraint))
-    self.ff3 = SpecNorm(tf.keras.layers.Dense(units=self.dim,
-                                     use_bias=self.use_bias,
-                                     kernel_initializer=self.kernel_initializer,
-                                     bias_initializer=self.bias_initializer,
-                                     kernel_regularizer=self.kernel_regularizer,
-                                     bias_regularizer=self.bias_regularizer,
-                                     kernel_constraint=self.kernel_constraint,
-                                     bias_constraint=self.bias_constraint))
-    self.ff4 = SpecNorm(tf.keras.layers.Dense(units=self.dim,
-                                     use_bias=self.use_bias,
-                                     kernel_initializer=self.kernel_initializer,
-                                     bias_initializer=self.bias_initializer,
-                                     kernel_regularizer=self.kernel_regularizer,
-                                     bias_regularizer=self.bias_regularizer,
-                                     kernel_constraint=self.kernel_constraint,
-                                     bias_constraint=self.bias_constraint))
+                                     bias_constraint=self.bias_constraint)
     # layer normalization
-    self.lnm = tf.keras.layers.LayerNormalization(axis=(-2,-1))
+    self.ln1 = tf.keras.layers.LayerNormalization(axis=(-2,-1))
+    self.ln2 = tf.keras.layers.LayerNormalization(axis=(-2,-1))
     # position masking
     msk_list = [tf.zeros(shape=(1,self.width))]
     for i in range(1,self.dim):
@@ -255,13 +240,11 @@ class PosMaskedMHABlock(ReluLayer):
 
   def call(self, inputs):
     # sub-block 1 - multi-head attention with residual connection
-    a = self.lnm(self.mha(inputs,inputs))
+    a = self.ln1(self.mha(inputs,inputs))
     a = inputs + (a * self.msk)
     # sub-block 2 - feed-forward with residual connection
-    b = gnact(self.ff1(a), alpha=self.relu_alpha)
-    b = gnact(self.ff2(b), alpha=self.relu_alpha)
-    b = gnact(self.ff3(b), alpha=self.relu_alpha)
-    b = gnact(self.ff4(b), alpha=self.relu_alpha)
+    b = self.ln2(gnact(self.ff1(a), alpha=self.relu_alpha))
+    b =          gnact(self.ff2(b), alpha=self.relu_alpha)
     b = a + (b * self.msk)
     return b
 
@@ -311,7 +294,7 @@ class DataNoise(WidthLayer):
                                 kernel_constraint=self.kernel_constraint,
                                 bias_constraint=self.bias_constraint)
     """
-    self.stdv = SpecNorm(tf.keras.layers.LocallyConnected1D(filters=1,
+    self.stdv = tf.keras.layers.LocallyConnected1D(filters=1,
                                 kernel_size=1,
                                 activation=tf.keras.activations.relu,
                                 use_bias=self.use_bias,
@@ -320,7 +303,7 @@ class DataNoise(WidthLayer):
                                 kernel_regularizer=self.kernel_regularizer,
                                 bias_regularizer=self.bias_regularizer,
                                 kernel_constraint=self.kernel_constraint,
-                                bias_constraint=self.bias_constraint))
+                                bias_constraint=self.bias_constraint)
     msks = []
     for i in range(dim-1):
       msks.append(tf.zeros(shape=(1,self.width)))
@@ -403,7 +386,7 @@ class UpsamplBlock(ReluLayer):
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
-def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=4, datadim=4):
+def CondGen1D(input_shape, width, attn_hds=2, nattnblocks=4, datadim=4):
   """
   construct generator using functional API
   """
