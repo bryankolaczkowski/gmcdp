@@ -82,6 +82,14 @@ class DecodeDis(ReluLayer):
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
     self.flt = tf.keras.layers.Flatten()
+    self.dn1 = tf.keras.layers.Dense(units=self.dim,
+                                  use_bias=self.use_bias,
+                                  kernel_initializer=self.kernel_initializer,
+                                  bias_initializer=self.bias_initializer,
+                                  kernel_regularizer=self.kernel_regularizer,
+                                  bias_regularizer=self.bias_regularizer,
+                                  kernel_constraint=self.kernel_constraint,
+                                  bias_constraint=self.bias_constraint)
     self.out = tf.keras.layers.Dense(units=1,
                                   use_bias=self.use_bias,
                                   kernel_initializer=self.kernel_initializer,
@@ -96,7 +104,9 @@ class DecodeDis(ReluLayer):
   def call(self, inputs):
     x = gnact(self.cn1(inputs), alpha=self.relu_alpha)
     x = gnact(self.cn2(x),      alpha=self.relu_alpha)
-    return self.out(self.flt(x))
+    x = self.flt(x)
+    x = gnact(self.dn1(x), alpha=self.relu_alpha)
+    return self.out(x)
 
   def get_config(self):
     config = super(DecodeGen, self).get_config()
