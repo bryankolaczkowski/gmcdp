@@ -213,9 +213,7 @@ class PosMaskedMHABlock(ReluLayer):
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
     # feed-forward layers
-    self.ff1 = tf.keras.layers.Conv1D(filters=self.dim * 2,
-                                    kernel_size=3,
-                                    padding='same',
+    self.ff1 = tf.keras.layers.Dense(units=self.dim * 2,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
                                     bias_initializer=self.bias_initializer,
@@ -223,9 +221,7 @@ class PosMaskedMHABlock(ReluLayer):
                                     bias_regularizer=self.bias_regularizer,
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
-    self.ff2 = tf.keras.layers.Conv1D(filters=self.dim,
-                                    kernel_size=3,
-                                    padding='same',
+    self.ff2 = tf.keras.layers.Dense(units=self.dim,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
                                     bias_initializer=self.bias_initializer,
@@ -380,7 +376,7 @@ class UpsamplBlock(ReluLayer):
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
-def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=4, datadim=8):
+def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=8, datadim=8):
   """
   construct generator using functional API
   """
