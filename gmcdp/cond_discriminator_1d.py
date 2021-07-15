@@ -6,7 +6,7 @@ from tensorflow.keras import initializers, regularizers, constraints, Model
 from tensorflow.keras.layers import Layer
 import tensorflow as tf
 
-from cond_generator_1d import EncodeLayer, ReluLayer, PosMaskedMHABlock
+from cond_generator_1d import EncodeLayer, DecodeGen, PosMaskedMHABlock
 from cond_generator_1d import gnact
 
 
@@ -52,71 +52,21 @@ class EncodeDis(EncodeLayer):
     return tf.concat((pse, lpl, dt2, dt1), axis=-1)
 
 
-class DecodeDis(ReluLayer):
+class DecodeDis(DecodeGen):
   """
   decodes discriminator output to score
   """
-  def __init__(self, dim, *args, **kwargs):
+  def __init__(self, *args, **kwargs):
     super(DecodeDis, self).__init__(*args, **kwargs)
-    # config copy
-    self.dim = dim
-    # construct
-    self.cn1 = tf.keras.layers.Conv1D(filters=self.dim,
-                                    kernel_size=3,
-                                    padding='same',
-                                    use_bias=self.use_bias,
-                                    kernel_initializer=self.kernel_initializer,
-                                    bias_initializer=self.bias_initializer,
-                                    kernel_regularizer=self.kernel_regularizer,
-                                    bias_regularizer=self.bias_regularizer,
-                                    kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint)
-    self.cn2 = tf.keras.layers.Conv1D(filters=self.dim,
-                                    kernel_size=3,
-                                    padding='same',
-                                    use_bias=self.use_bias,
-                                    kernel_initializer=self.kernel_initializer,
-                                    bias_initializer=self.bias_initializer,
-                                    kernel_regularizer=self.kernel_regularizer,
-                                    bias_regularizer=self.bias_regularizer,
-                                    kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint)
-    self.flt = tf.keras.layers.Flatten()
-    self.dn1 = tf.keras.layers.Dense(units=self.dim,
-                                  use_bias=self.use_bias,
-                                  kernel_initializer=self.kernel_initializer,
-                                  bias_initializer=self.bias_initializer,
-                                  kernel_regularizer=self.kernel_regularizer,
-                                  bias_regularizer=self.bias_regularizer,
-                                  kernel_constraint=self.kernel_constraint,
-                                  bias_constraint=self.bias_constraint)
-    self.out = tf.keras.layers.Dense(units=1,
-                                  use_bias=self.use_bias,
-                                  kernel_initializer=self.kernel_initializer,
-                                  bias_initializer=self.bias_initializer,
-                                  kernel_regularizer=self.kernel_regularizer,
-                                  bias_regularizer=self.bias_regularizer,
-                                  kernel_constraint=self.kernel_constraint,
-                                  bias_constraint=self.bias_constraint)
-
     return
 
   def call(self, inputs):
     x = gnact(self.cn1(inputs), alpha=self.relu_alpha)
     x = gnact(self.cn2(x),      alpha=self.relu_alpha)
-    x = self.flt(x)
-    x = gnact(self.dn1(x), alpha=self.relu_alpha)
-    return self.out(x)
-
-  def get_config(self):
-    config = super(DecodeGen, self).get_config()
-    config.update({
-      'dim' : self.dim,
-    })
-    return config
+    return self.out(self.flt(x))
 
 
-def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=8, lbldim=4):
+def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=4, lbldim=4):
   """
   construct a discriminator using functional API
   """
@@ -130,7 +80,7 @@ def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=8, lbldim=4):
                             dim=datadim,
                             heads=attn_hds,
                             name='ma{}'.format(i))(out)
-  out = DecodeDis(width=data_width, dim=datadim*2, name='dec')(out)
+  out = DecodeDis(width=data_width, name='dec')(out)
   return Model(inputs=(in1,in2,in3), outputs=out)
 
 

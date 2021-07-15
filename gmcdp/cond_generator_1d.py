@@ -152,12 +152,10 @@ class DecodeGen(ReluLayer):
   """
   decodes generator output to data
   """
-  def __init__(self, dim, *args, **kwargs):
+  def __init__(self, *args, **kwargs):
     super(DecodeGen, self).__init__(*args, **kwargs)
-    # config copy
-    self.dim = dim
     # construct
-    self.prj = tf.keras.layers.Conv1D(filters=self.width,
+    self.cn1 = tf.keras.layers.Conv1D(filters=self.width,
                                     kernel_size=3,
                                     padding='same',
                                     use_bias=self.use_bias,
@@ -167,7 +165,16 @@ class DecodeGen(ReluLayer):
                                     bias_regularizer=self.bias_regularizer,
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
-    self.flt = tf.keras.layers.Flatten()
+    self.cn2 = tf.keras.layers.Conv1D(filters=self.width,
+                                    kernel_size=3,
+                                    padding='same',
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
     self.out = tf.keras.layers.Dense(units=1,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
@@ -176,18 +183,13 @@ class DecodeGen(ReluLayer):
                                     bias_regularizer=self.bias_regularizer,
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
+    self.flt = tf.keras.layers.Flatten()
     return
 
   def call(self, inputs):
-    x = gnact(self.prj(inputs))
+    x = gnact(self.cn1(inputs), alpha=self.relu_alpha)
+    x = gnact(self.cn2(x),      alpha=self.relu_alpha)
     return self.flt(self.out(x))
-
-  def get_config(self):
-    config = super(DecodeGen, self).get_config()
-    config.update({
-      'dim' : self.dim,
-    })
-    return config
 
 
 class PosMaskedMHABlock(ReluLayer):
@@ -374,7 +376,7 @@ class UpsamplBlock(ReluLayer):
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
-def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=8, datadim=8):
+def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=4, datadim=8):
   """
   construct generator using functional API
   """
@@ -400,7 +402,7 @@ def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=8, datadim=8):
                          dim=datadim,
                          name='nse{}'.format(i))(output)
   ## data decoding
-  output = DecodeGen(width=width, dim=datadim*2, name='decd')(output)
+  output = DecodeGen(width=width, name='decd')(output)
   return Model(inputs=inputs, outputs=(output,inputs))
 
 
