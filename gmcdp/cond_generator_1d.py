@@ -157,7 +157,7 @@ class DecodeGen(ReluLayer):
     # config copy
     self.dim = dim
     # construct
-    self.prj = tf.keras.layers.Conv1D(filters=1,
+    self.prj = tf.keras.layers.Conv1D(filters=self.width,
                                     kernel_size=3,
                                     padding='same',
                                     use_bias=self.use_bias,
@@ -168,7 +168,7 @@ class DecodeGen(ReluLayer):
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
     self.flt = tf.keras.layers.Flatten()
-    self.out = tf.keras.layers.Dense(units=self.width,
+    self.out = tf.keras.layers.Dense(units=1,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
                                     bias_initializer=self.bias_initializer,
@@ -180,7 +180,7 @@ class DecodeGen(ReluLayer):
 
   def call(self, inputs):
     x = gnact(self.prj(inputs))
-    return self.out(self.flt(x))
+    return self.flt(self.out(x))
 
   def get_config(self):
     config = super(DecodeGen, self).get_config()
