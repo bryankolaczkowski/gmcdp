@@ -275,7 +275,7 @@ class DataNoise(WidthLayer):
     # config copy
     self.dim = dim
     # construct
-    self.stdv = tf.keras.layers.LocallyConnected1D(filters=1,
+    self.stdv = tf.keras.layers.LocallyConnected1D(filters=self.dim,
                                 kernel_size=1,
                                 activation=tf.keras.activations.relu,
                                 use_bias=self.use_bias,
@@ -285,10 +285,9 @@ class DataNoise(WidthLayer):
                                 bias_regularizer=self.bias_regularizer,
                                 kernel_constraint=self.kernel_constraint,
                                 bias_constraint=self.bias_constraint)
-    msks = []
+    msks = [tf.zeros(shape=(1,self.width))] # no noise on position channel
     for i in range(dim-1):
-      msks.append(tf.zeros(shape=(1,self.width)))
-    msks.append(tf.ones(shape=(1,self.width)))
+      msks.append(tf.ones(shape=(1,self.width)))
     self.mask = tf.stack(msks, axis=-1)
     return
 
@@ -298,7 +297,7 @@ class DataNoise(WidthLayer):
     # generate masked random vector affecting only last data dimension
     rv = tf.random.normal(mean=0.0,
                           stddev=sd,
-                          shape=(bs,self.width,1)) * self.mask
+                          shape=(bs,self.width,self.dim)) * self.mask
     return inputs + rv
 
   def get_config(self):
