@@ -7,8 +7,6 @@ from tensorflow.keras.layers import Layer
 import tensorflow as tf
 import math
 
-from wrappers import SpecNorm
-
 
 @tf.function(experimental_relax_shapes=True)
 def gnact(x, alpha=0.4):
@@ -114,14 +112,14 @@ class EncodeLayer(WidthLayer):
     self.pos = tf.linspace(+2.0, -2.0, self.width)
     self.pos = tf.expand_dims(tf.expand_dims(self.pos, axis=-1), axis=0)
     self.flt = tf.keras.layers.Flatten()
-    self.lpr = SpecNorm(tf.keras.layers.Dense(units=self.width * self.dim,
+    self.lpr = tf.keras.layers.Dense(units=self.width * self.dim,
                                   use_bias=self.use_bias,
                                   kernel_initializer=self.kernel_initializer,
                                   bias_initializer=self.bias_initializer,
                                   kernel_regularizer=self.kernel_regularizer,
                                   bias_regularizer=self.bias_regularizer,
                                   kernel_constraint=self.kernel_constraint,
-                                  bias_constraint=self.bias_constraint))
+                                  bias_constraint=self.bias_constraint)
     return
 
   def get_config(self):
@@ -159,7 +157,7 @@ class DecodeGen(ReluLayer):
     # config copy
     self.dim = dim
     # construct
-    self.prj = tf.keras.layers.Conv1D(filters=self.dim * 2,
+    self.prj = tf.keras.layers.Conv1D(filters=self.dim,
                                     kernel_size=3,
                                     padding='same',
                                     use_bias=self.use_bias,
@@ -381,6 +379,7 @@ def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=8, datadim=8):
   construct generator using functional API
   """
   ## input encoding
+  datadim = datadim + 1
   start_width = 64
   inputs = tf.keras.Input(shape=input_shape, name='lbin')
   output = EncodeGen(width=start_width, dim=datadim, name='encd')(inputs)
@@ -401,7 +400,7 @@ def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=8, datadim=8):
                          dim=datadim,
                          name='nse{}'.format(i))(output)
   ## data decoding
-  output = DecodeGen(width=width, dim=datadim, name='decd')(output)
+  output = DecodeGen(width=width, dim=datadim*2, name='decd')(output)
   return Model(inputs=inputs, outputs=(output,inputs))
 
 

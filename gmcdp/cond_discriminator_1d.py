@@ -8,7 +8,6 @@ import tensorflow as tf
 
 from cond_generator_1d import EncodeLayer, ReluLayer, PosMaskedMHABlock
 from cond_generator_1d import gnact
-from wrappers import SpecNorm
 
 
 class EncodeDis(EncodeLayer):
@@ -17,16 +16,39 @@ class EncodeDis(EncodeLayer):
   """
   def __init__(self, *args, **kwargs):
     super(EncodeDis, self).__init__(*args, **kwargs)
+    # construct
+    self.dp1 = tf.keras.layers.Dense(units=self.dim,
+                                  use_bias=self.use_bias,
+                                  kernel_initializer=self.kernel_initializer,
+                                  bias_initializer=self.bias_initializer,
+                                  kernel_regularizer=self.kernel_regularizer,
+                                  bias_regularizer=self.bias_regularizer,
+                                  kernel_constraint=self.kernel_constraint,
+                                  bias_constraint=self.bias_constraint)
+    self.dp2 = tf.keras.layers.Dense(units=self.dim,
+                                  use_bias=self.use_bias,
+                                  kernel_initializer=self.kernel_initializer,
+                                  bias_initializer=self.bias_initializer,
+                                  kernel_regularizer=self.kernel_regularizer,
+                                  bias_regularizer=self.bias_regularizer,
+                                  kernel_constraint=self.kernel_constraint,
+                                  bias_constraint=self.bias_constraint)
     return
 
   def call(self, inputs):
-    dt1 = tf.expand_dims(inputs[0], axis=-1)    # data - real or fake?
-    dt2 = tf.expand_dims(inputs[1], axis=-1)    # data - definitely fake
-    lbl = inputs[2]                             # labels
-    bs  = tf.shape(lbl)[0]                      # batch size
-    pse = tf.tile(self.pos, multiples=(bs,1,1)) # sequence position encoding
-    lpl = self.lpr(self.flt(lbl))               # linear project labels
+    dt1 = tf.expand_dims(inputs[0], axis=-1)  # data - real or fake?
+    dt2 = tf.expand_dims(inputs[1], axis=-1)  # data - definitely fake
+    lbl = inputs[2]                           # labels
+    bs  = tf.shape(lbl)[0]                    # batch size
+    # sequence position encoding
+    pse = tf.tile(self.pos, multiples=(bs,1,1))
+    # linear project labels
+    lpl = self.lpr(self.flt(lbl))
     lpl = tf.reshape(lpl, shape=(bs,self.width,self.dim))
+    # linear project data 2
+    dt2 = self.dp2(dt2)
+    # linear project data 1
+    dt1 = self.dp1(dt1)
     return tf.concat((pse, lpl, dt2, dt1), axis=-1)
 
 
@@ -34,26 +56,32 @@ class DecodeDis(ReluLayer):
   """
   decodes discriminator output to score
   """
-  def __init__(self, *args, **kwargs):
+  def __init__(self, dim, *args, **kwargs):
     super(DecodeDis, self).__init__(*args, **kwargs)
+    # config copy
+    self.dim = dim
     # construct
+    self.cn1 = tf.keras.layers.Conv1D(filters=self.dim,
+                                    kernel_size=3,
+                                    padding='same',
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
+    self.cn2 = tf.keras.layers.Conv1D(filters=self.dim,
+                                    kernel_size=3,
+                                    padding='same',
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
     self.flt = tf.keras.layers.Flatten()
-    self.dn1 = SpecNorm(tf.keras.layers.Dense(units=self.width,
-                                  use_bias=self.use_bias,
-                                  kernel_initializer=self.kernel_initializer,
-                                  bias_initializer=self.bias_initializer,
-                                  kernel_regularizer=self.kernel_regularizer,
-                                  bias_regularizer=self.bias_regularizer,
-                                  kernel_constraint=self.kernel_constraint,
-                                  bias_constraint=self.bias_constraint))
-    self.dn2 = SpecNorm(tf.keras.layers.Dense(units=self.width,
-                                  use_bias=self.use_bias,
-                                  kernel_initializer=self.kernel_initializer,
-                                  bias_initializer=self.bias_initializer,
-                                  kernel_regularizer=self.kernel_regularizer,
-                                  bias_regularizer=self.bias_regularizer,
-                                  kernel_constraint=self.kernel_constraint,
-                                  bias_constraint=self.bias_constraint))
     self.out = tf.keras.layers.Dense(units=1,
                                   use_bias=self.use_bias,
                                   kernel_initializer=self.kernel_initializer,
@@ -66,18 +94,23 @@ class DecodeDis(ReluLayer):
     return
 
   def call(self, inputs):
-    x = self.flt(inputs)
-    x = gnact(self.dn1(x), alpha=self.relu_alpha)
-    x = gnact(self.dn2(x), alpha=self.relu_alpha)
-    x = gnact(self.out(x), alpha=self.relu_alpha)
-    return x
+    x = gnact(self.cn1(inputs), alpha=self.relu_alpha)
+    x = gnact(self.cn2(x),      alpha=self.relu_alpha)
+    return self.out(self.flt(x))
+
+  def get_config(self):
+    config = super(DecodeGen, self).get_config()
+    config.update({
+      'dim' : self.dim,
+    })
+    return config
 
 
-def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=4, lbldim=4):
+def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=8, lbldim=4):
   """
   construct a discriminator using functional API
   """
-  datadim = lbldim + 3
+  datadim = lbldim * 3 + 1
   in1 = tf.keras.Input(shape=(data_width,),  name='in1')
   in2 = tf.keras.Input(shape=(data_width,),  name='in2')
   in3 = tf.keras.Input(shape=(label_width,), name='in3')
@@ -87,7 +120,7 @@ def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=4, lbldim=4):
                             dim=datadim,
                             heads=attn_hds,
                             name='ma{}'.format(i))(out)
-  out = DecodeDis(width=data_width, name='dec')(out)
+  out = DecodeDis(width=data_width, dim=datadim*2, name='dec')(out)
   return Model(inputs=(in1,in2,in3), outputs=out)
 
 
