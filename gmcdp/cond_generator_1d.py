@@ -10,7 +10,7 @@ import math
 from wrappers import SpecNorm
 
 
-@tf.function
+@tf.function(experimental_relax_shapes=True)
 def gnact(x, alpha=0.4):
   """
   2-sided 'leaky-rectified' linear activation
@@ -150,13 +150,25 @@ class EncodeGen(EncodeLayer):
     return tf.concat((ps, lp), axis=-1)
 
 
-class DecodeGen(WidthLayer):
+class DecodeGen(ReluLayer):
   """
   decodes generator output to data
   """
-  def __init__(self, *args, **kwargs):
+  def __init__(self, dim, *args, **kwargs):
     super(DecodeGen, self).__init__(*args, **kwargs)
+    # config copy
+    self.dim = dim
     # construct
+    self.prj = tf.keras.layers.Conv1D(filters=self.dim * 2,
+                                    kernel_size=3,
+                                    padding='same',
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
     self.out = tf.keras.layers.Dense(units=1,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
@@ -165,22 +177,19 @@ class DecodeGen(WidthLayer):
                                     bias_regularizer=self.bias_regularizer,
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
-    """
-    self.out = tf.keras.layers.LocallyConnected1D(filters=1,
-                                    kernel_size=1,
-                                    use_bias=self.use_bias,
-                                    kernel_initializer=self.kernel_initializer,
-                                    bias_initializer=self.bias_initializer,
-                                    kernel_regularizer=self.kernel_regularizer,
-                                    bias_regularizer=self.bias_regularizer,
-                                    kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint)
-    """
     self.flt = tf.keras.layers.Flatten()
     return
 
   def call(self, inputs):
-    return self.flt(self.out(inputs))
+    x = gnact(self.prj(inputs))
+    return self.flt(self.out(x))
+
+  def get_config(self):
+    config = super(DecodeGen, self).get_config()
+    config.update({
+      'dim' : self.dim,
+    })
+    return config
 
 
 class PosMaskedMHABlock(ReluLayer):
@@ -204,22 +213,26 @@ class PosMaskedMHABlock(ReluLayer):
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
     # feed-forward layers
-    self.ff1 = tf.keras.layers.Dense(units=self.dim,
-                                     use_bias=self.use_bias,
-                                     kernel_initializer=self.kernel_initializer,
-                                     bias_initializer=self.bias_initializer,
-                                     kernel_regularizer=self.kernel_regularizer,
-                                     bias_regularizer=self.bias_regularizer,
-                                     kernel_constraint=self.kernel_constraint,
-                                     bias_constraint=self.bias_constraint)
-    self.ff2 = tf.keras.layers.Dense(units=self.dim,
-                                     use_bias=self.use_bias,
-                                     kernel_initializer=self.kernel_initializer,
-                                     bias_initializer=self.bias_initializer,
-                                     kernel_regularizer=self.kernel_regularizer,
-                                     bias_regularizer=self.bias_regularizer,
-                                     kernel_constraint=self.kernel_constraint,
-                                     bias_constraint=self.bias_constraint)
+    self.ff1 = tf.keras.layers.Conv1D(filters=self.dim * 2,
+                                    kernel_size=3,
+                                    padding='same',
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
+    self.ff2 = tf.keras.layers.Conv1D(filters=self.dim,
+                                    kernel_size=3,
+                                    padding='same',
+                                    use_bias=self.use_bias,
+                                    kernel_initializer=self.kernel_initializer,
+                                    bias_initializer=self.bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer,
+                                    bias_regularizer=self.bias_regularizer,
+                                    kernel_constraint=self.kernel_constraint,
+                                    bias_constraint=self.bias_constraint)
     # layer normalization
     self.ln1 = tf.keras.layers.LayerNormalization(axis=(-2,-1))
     self.ln2 = tf.keras.layers.LayerNormalization(axis=(-2,-1))
@@ -231,12 +244,14 @@ class PosMaskedMHABlock(ReluLayer):
     return
 
   def call(self, inputs):
-    # sub-block 1 - multi-head attention with residual connection
-    a = self.ln1(self.mha(inputs,inputs))
+    # sub-block 1 - pre-lyrnorm, multi-head attn, residual
+    a = self.ln1(inputs)
+    a = self.mha(a,a)
     a = inputs + (a * self.msk)
-    # sub-block 2 - feed-forward with residual connection
-    b = self.ln2(gnact(self.ff1(a), alpha=self.relu_alpha))
-    b =          gnact(self.ff2(b), alpha=self.relu_alpha)
+    # sub-block 2 - pre-lyrnorm, feed-forward, residual
+    b = self.ln2(a)
+    b = gnact(self.ff1(b), alpha=self.relu_alpha)
+    b = gnact(self.ff2(b), alpha=self.relu_alpha)
     b = a + (b * self.msk)
     return b
 
@@ -266,7 +281,7 @@ class AveUpsample(Layer):
     return self.avepl(self.upspl(inputs))
 
 
-class DataNoise(WidthLayer):
+class DataNoise(ReluLayer):
   """
   adaptive noise injection into data
   """
@@ -275,9 +290,9 @@ class DataNoise(WidthLayer):
     # config copy
     self.dim = dim
     # construct
-    self.stdv = tf.keras.layers.LocallyConnected1D(filters=self.dim,
-                                kernel_size=1,
-                                activation=tf.keras.activations.relu,
+    self.stdv = tf.keras.layers.Conv1D(filters=self.dim,
+                                kernel_size=3,
+                                padding='same',
                                 use_bias=self.use_bias,
                                 kernel_initializer=tf.keras.initializers.zeros,
                                 bias_initializer=tf.keras.initializers.zeros,
@@ -293,7 +308,7 @@ class DataNoise(WidthLayer):
 
   def call(self, inputs):
     bs = tf.shape(inputs)[0]
-    sd = self.stdv(inputs) + 1.0e-5 # project noise stdvs
+    sd = gnact(self.stdv(inputs), alpha=self.relu_alpha) # project noise stdvs
     # generate masked random vector affecting only last data dimension
     rv = tf.random.normal(mean=0.0,
                           stddev=sd,
@@ -390,7 +405,7 @@ def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=4, datadim=8):
                          dim=datadim,
                          name='nse{}'.format(i))(output)
   ## data decoding
-  output = DecodeGen(width=width, name='decd')(output)
+  output = DecodeGen(width=width, dim=datadim, name='decd')(output)
   return Model(inputs=inputs, outputs=(output,inputs))
 
 
