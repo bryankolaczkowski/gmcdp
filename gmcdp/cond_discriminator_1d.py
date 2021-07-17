@@ -66,7 +66,7 @@ class DecodeDis(DecodeGen):
     return self.out(self.flt(x))
 
 
-def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=4, lbldim=4):
+def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=8, lbldim=4):
   """
   construct a discriminator using functional API
   """

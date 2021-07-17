@@ -376,7 +376,7 @@ class UpsamplBlock(ReluLayer):
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
-def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=4, datadim=8):
+def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=8, datadim=8):
   """
   construct generator using functional API
   """
