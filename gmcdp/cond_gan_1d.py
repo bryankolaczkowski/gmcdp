@@ -249,7 +249,7 @@ if __name__ == '__main__':
   ## training data ##
   ndata     = 16344
   #ndata     = 262144
-  batchsize = 128
+  batchsize = 64
 
   # generate training simulated data and labels
   dtas,lbls = test_data_generator.gen_dataset(ndata, plot=False)
@@ -262,7 +262,7 @@ if __name__ == '__main__':
   data = data.shuffle(ndata).batch(batchsize)
 
   ## validation data ##
-  val_ndata = 128
+  val_ndata = 64
 
   # generate validation simulated data and labels
   val_dtas,val_lbls = test_data_generator.gen_dataset(val_ndata, plot=False)
