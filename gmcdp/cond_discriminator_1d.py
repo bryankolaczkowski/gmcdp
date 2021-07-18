@@ -60,13 +60,16 @@ class DecodeDis(DecodeGen):
     super(DecodeDis, self).__init__(*args, **kwargs)
     return
 
-  def call(self, inputs):
-    x = gnact(self.cn1(inputs), alpha=self.relu_alpha)
-    x = gnact(self.cn2(x),      alpha=self.relu_alpha)
-    return self.out(self.flt(x))
+  def _finalize(self, inputs):
+    return self.out(self.flt(inputs))
 
 
-def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=8, lbldim=4):
+def CondDis1D(data_width,
+              label_width,
+              attn_hds=4,
+              nattnblocks=8,
+              lbldim=4,
+              dropout=0.1):
   """
   construct a discriminator using functional API
   """
@@ -79,6 +82,7 @@ def CondDis1D(data_width, label_width, attn_hds=4, nattnblocks=8, lbldim=4):
     out = PosMaskedMHABlock(width=data_width,
                             dim=datadim,
                             heads=attn_hds,
+                            dropout=dropout,
                             name='ma{}'.format(i))(out)
   out = DecodeDis(width=data_width, name='dec')(out)
   return Model(inputs=(in1,in2,in3), outputs=out)

@@ -152,8 +152,10 @@ class DecodeGen(ReluLayer):
   """
   decodes generator output to data
   """
-  def __init__(self, *args, **kwargs):
+  def __init__(self, *args, dropout=0.0, **kwargs):
     super(DecodeGen, self).__init__(*args, **kwargs)
+    # config copy
+    self.dropout = dropout
     # construct
     self.cn1 = tf.keras.layers.Conv1D(filters=self.width,
                                     kernel_size=3,
@@ -183,28 +185,41 @@ class DecodeGen(ReluLayer):
                                     bias_regularizer=self.bias_regularizer,
                                     kernel_constraint=self.kernel_constraint,
                                     bias_constraint=self.bias_constraint)
+    self.dot = tf.keras.layers.Dropout(rate=self.dropout)
     self.flt = tf.keras.layers.Flatten()
     return
 
+  def _finalize(self, inputs):
+    return self.flt(self.out(inputs))
+
   def call(self, inputs):
-    x = gnact(self.cn1(inputs), alpha=self.relu_alpha)
-    x = gnact(self.cn2(x),      alpha=self.relu_alpha)
-    return self.flt(self.out(x))
+    x = self.dot(gnact(self.cn1(inputs), alpha=self.relu_alpha))
+    x = self.dot(gnact(self.cn2(x),      alpha=self.relu_alpha))
+    return self._finalize(x)
+
+  def get_config(self):
+    config = super(DecodeGen, self).get_config()
+    config.update({
+      'dropout' : self.dropout,
+    })
+    return config
 
 
 class PosMaskedMHABlock(ReluLayer):
   """
   multi-head attention + ffwd block with position vector mask
   """
-  def __init__(self, dim, heads, *args, **kwargs):
+  def __init__(self, dim, heads, *args, dropout=0.0, **kwargs):
     super(PosMaskedMHABlock, self).__init__(*args, **kwargs)
     # config copy
-    self.dim   = dim
-    self.heads = heads
+    self.dim     = dim
+    self.heads   = heads
+    self.dropout = dropout
     # construct
     # multi-head attention layer
     self.mha = tf.keras.layers.MultiHeadAttention(num_heads=self.heads,
                                     key_dim=self.dim,
+                                    dropout=self.dropout,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,
                                     bias_initializer=self.bias_initializer,
@@ -254,8 +269,9 @@ class PosMaskedMHABlock(ReluLayer):
   def get_config(self):
     config = super(PosMaskedMHABlock, self).get_config()
     config.update({
-      'dim'   : self.dim,
-      'heads' : self.heads,
+      'dim'     : self.dim,
+      'heads'   : self.heads,
+      'dropout' : self.dropout,
     })
     return config
 
@@ -376,7 +392,12 @@ class UpsamplBlock(ReluLayer):
 
 ## CONDITIONAL GENERATOR BUILD FUNCTION ########################################
 
-def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=8, datadim=8):
+def CondGen1D(input_shape,
+              width,
+              attn_hds=4,
+              nattnblocks=8,
+              datadim=8,
+              dropout=0.1):
   """
   construct generator using functional API
   """
@@ -396,13 +417,14 @@ def CondGen1D(input_shape, width, attn_hds=4, nattnblocks=8, datadim=8):
     output = PosMaskedMHABlock(width=width,
                                dim=datadim,
                                heads=attn_hds,
+                               dropout=dropout,
                                name='mha{}'.format(i))(output)
     if i % 2 == 1:
       output = DataNoise(width=width,
                          dim=datadim,
                          name='nse{}'.format(i))(output)
   ## data decoding
-  output = DecodeGen(width=width, name='decd')(output)
+  output = DecodeGen(width=width, dropout=dropout, name='decd')(output)
   return Model(inputs=inputs, outputs=(output,inputs))
 
 
