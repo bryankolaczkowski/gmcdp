@@ -223,7 +223,9 @@ class CondGan1D(Model):
 
     return {'disr_rl' : disr_rl,
             'disr_fk' : disr_fk,
-            'genr_ls' : genr_ls,}
+            'genr_ls' : genr_ls,
+            'genr_lr' : self.optimizer.gen_optimizer.learning_rate,
+            'disr_lr' : self.optimizer.dis_optimizer.learning_rate,}
 
   def get_config(self):
     config = super(CondGan1D, self).get_config()
