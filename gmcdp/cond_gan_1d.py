@@ -223,9 +223,7 @@ class CondGan1D(Model):
 
     return {'disr_rl' : disr_rl,
             'disr_fk' : disr_fk,
-            'genr_ls' : genr_ls,
-            'genr_lr' : self.optimizer.gen_optimizer.learning_rate,
-            'disr_lr' : self.optimizer.dis_optimizer.learning_rate,}
+            'genr_ls' : genr_ls,}
 
   def get_config(self):
     config = super(CondGan1D, self).get_config()
@@ -355,4 +353,6 @@ if __name__ == '__main__':
           verbose=1,
           validation_data=val_data,
           callbacks=[tf.keras.callbacks.TensorBoard(),
+                     tf.keras.callbacks.LearningRateScheduler(gsch),
+                     tf.keras.callbacks.LearningRateScheduler(dsch),
                      PlotCallback()])
