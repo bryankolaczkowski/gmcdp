@@ -292,8 +292,12 @@ if __name__ == '__main__':
                                                   decay_steps=decay_steps,
                                                   decay_rate=decay_rate,
                                                   staircase=True)
-  gopt = tf.keras.optimizers.SGD(momentum=0.8, nesterov=True)
-  dopt = tf.keras.optimizers.SGD(momentum=0.8, nesterov=True)
+  gopt = tf.keras.optimizers.SGD(learning_rate=gsch,
+                                 momentum=0.8,
+                                 nesterov=True)
+  dopt = tf.keras.optimizers.SGD(learning_rate=dsch,
+                                 momentum=0.8,
+                                 nesterov=True)
   opt  = GanOptimizer(gopt, dopt)
 
   # create gan
