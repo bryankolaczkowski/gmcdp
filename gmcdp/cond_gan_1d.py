@@ -33,24 +33,22 @@ class GanOptimizer(Optimizer):
   implements a generator,discriminator optimizer pair
   """
   def __init__(self,
-               learning_rate=1.0e-5,
-               dis_lr_mult=0.1,
-               gen_optimizer='adam',
-               dis_optimizer='adam',
+               gen_optimizer='sgd',
+               dis_optimizer='sgd',
                **kwargs):
     super(GanOptimizer, self).__init__(name='GanOptimizer', **kwargs)
-    self.__dict__['gen_optimizer'] = optimizers.get(gen_optimizer)
-    self.__dict__['dis_optimizer'] = optimizers.get(dis_optimizer)
-    self.__dict__['dis_lr_mult']   = dis_lr_mult
-    self.learning_rate             = learning_rate
+    self.gen_optimizer = optimizers.get(gen_optimizer)
+    self.dis_optimizer = optimizers.get(dis_optimizer)
     return
 
+  """
   def __setattr__(self, name, value):
     super(GanOptimizer, self).__setattr__(name, value)
     if name == 'learning_rate' or name == 'lr':
       self.gen_optimizer.__setattr__(name, value)
       self.dis_optimizer.__setattr__(name, value * self.dis_lr_mult)
     return
+  """
 
   def apply_gradients(self, grads_and_vars,
                       name=None, experimental_aggregate_gradients=True):
@@ -281,10 +279,22 @@ if __name__ == '__main__':
 
   # create optimizer
   glr  = 1e-5
-  dlrm = 0.1
+  dlr  = glr * 0.1
+  decay_steps = int(ndata/batchsize) * 50
+  decay_rate  = 0.98
+  gsch = tf.keras.optimizers.schedules.ExponentialDecay(\
+                                                  initial_learning_rate=glr,
+                                                  decay_steps=decay_steps,
+                                                  decay_rate=decay_rate,
+                                                  staircase=True)
+  dsch = tf.keras.optimizers.schedules.ExponentialDecay(\
+                                                  initial_learning_rate=dlr,
+                                                  decay_steps=decay_steps,
+                                                  decay_rate=decay_rate,
+                                                  staircase=True)
   gopt = tf.keras.optimizers.SGD(momentum=0.8, nesterov=True)
   dopt = tf.keras.optimizers.SGD(momentum=0.8, nesterov=True)
-  opt  = GanOptimizer(glr, dlrm, gopt, dopt)
+  opt  = GanOptimizer(gopt, dopt)
 
   # create gan
   gan = CondGan1D(generator=gen, discriminator=dis)
