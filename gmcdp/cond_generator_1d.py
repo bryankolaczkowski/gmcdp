@@ -397,7 +397,7 @@ def CondGen1D(input_shape,
               attn_hds=4,
               nattnblocks=8,
               datadim=8,
-              dropout=0.1):
+              dropout=0.0):
   """
   construct generator using functional API
   """
