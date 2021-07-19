@@ -285,7 +285,7 @@ if __name__ == '__main__':
   glr  = 1e-5
   dlr  = glr * 0.1
   decay_steps = int(ndata/batchsize) * 50
-  decay_rate  = 0.98
+  decay_rate  = 0.9
   gsch = tf.keras.optimizers.schedules.ExponentialDecay(\
                                                   initial_learning_rate=glr,
                                                   decay_steps=decay_steps,
@@ -293,7 +293,7 @@ if __name__ == '__main__':
                                                   staircase=True)
   dsch = tf.keras.optimizers.schedules.ExponentialDecay(\
                                                   initial_learning_rate=dlr,
-                                                  decay_steps=decay_steps,
+                                                  decay_steps=decay_steps*2,
                                                   decay_rate=decay_rate,
                                                   staircase=True)
   gopt = tf.keras.optimizers.SGD(learning_rate=gsch,
