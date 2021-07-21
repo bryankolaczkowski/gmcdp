@@ -7,6 +7,8 @@ from tensorflow.keras.layers import Layer
 import tensorflow as tf
 import math
 
+from wrappers import SpecNorm
+
 
 @tf.function(experimental_relax_shapes=True)
 def gnact(x, alpha=0.4):
@@ -157,7 +159,7 @@ class DecodeGen(ReluLayer):
     # config copy
     self.dropout = dropout
     # construct
-    self.cn1 = tf.keras.layers.Conv1D(filters=self.width,
+    self.cn1 = SpecNorm(tf.keras.layers.Conv1D(filters=self.width,
                                     kernel_size=3,
                                     padding='same',
                                     use_bias=self.use_bias,
@@ -166,8 +168,8 @@ class DecodeGen(ReluLayer):
                                     kernel_regularizer=self.kernel_regularizer,
                                     bias_regularizer=self.bias_regularizer,
                                     kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint)
-    self.cn2 = tf.keras.layers.Conv1D(filters=self.width,
+                                    bias_constraint=self.bias_constraint))
+    self.cn2 = SpecNorm(tf.keras.layers.Conv1D(filters=self.width,
                                     kernel_size=3,
                                     padding='same',
                                     use_bias=self.use_bias,
@@ -176,7 +178,7 @@ class DecodeGen(ReluLayer):
                                     kernel_regularizer=self.kernel_regularizer,
                                     bias_regularizer=self.bias_regularizer,
                                     kernel_constraint=self.kernel_constraint,
-                                    bias_constraint=self.bias_constraint)
+                                    bias_constraint=self.bias_constraint))
     self.out = tf.keras.layers.Dense(units=1,
                                     use_bias=self.use_bias,
                                     kernel_initializer=self.kernel_initializer,

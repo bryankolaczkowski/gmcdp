@@ -8,6 +8,7 @@ import tensorflow as tf
 
 from cond_generator_1d import EncodeLayer, DecodeGen, PosMaskedMHABlock
 from cond_generator_1d import gnact
+from wrappers import SpecNorm
 
 
 class EncodeDis(EncodeLayer):
@@ -58,6 +59,7 @@ class DecodeDis(DecodeGen):
   """
   def __init__(self, *args, **kwargs):
     super(DecodeDis, self).__init__(*args, **kwargs)
+    self.out = SpecNorm(self.out)
     return
 
   def _finalize(self, inputs):
