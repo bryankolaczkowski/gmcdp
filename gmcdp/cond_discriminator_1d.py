@@ -69,7 +69,7 @@ def CondDis1D(data_width,
               attn_hds=4,
               nattnblocks=8,
               lbldim=4,
-              dropout=0.4):
+              dropout=0.2):
   """
   construct a discriminator using functional API
   """
