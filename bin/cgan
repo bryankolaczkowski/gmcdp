@@ -11,205 +11,16 @@ sys.path.append(libpath)
 
 import distutils.util
 import argparse
-import csv
+import pandas
 import numpy
 
 import tensorflow       as     tf
 from   tensorflow.data  import Dataset
-from   tensorflow.keras import layers, Model, Sequential, optimizers, losses, \
-                               metrics, callbacks, initializers
-from tensorflow.keras.layers.experimental import preprocessing
 
-from   gmcdp._version     import __version__
-from   gmcdp.customlayers import SpectralNormalization, BinaryOneHotEncoding
-from   gmcdp.generator    import buildGenerator
-
-### class definitions ----------------------------------------------------------
-
-# generative adversarial network
-# with binary label
-class biGAN(Model):
-
-  def __init__(self, disc, gen, dupdates, gradpenalty):
-    super(biGAN, self).__init__()
-    self.discriminator = disc
-    self.generator     = gen
-    self.dupdates      = dupdates
-    self.gradpenalty   = gradpenalty
-    return
-
-  def compile(self, optD, optG, loss_fn):
-    super(biGAN, self).compile()
-    self.optD    = optD
-    self.optG    = optG
-    self.loss_fn = loss_fn
-    # gradient penalty weight
-    self.gp_weight = 10.0
-    return
-
-  def grad_penalty(self, data):
-    """
-    data has shape ((batches,data_dim,1),(batches,1))
-    """
-    with tf.GradientTape() as gp_tape:
-      gp_tape.watch(data)
-      pred = self.discriminator(data, training=True)
-    gp_grds = gp_tape.gradient(pred, [data])[0]
-    s1      = tf.reduce_sum(tf.square(gp_grds[0]), axis=[1,2])
-    s2      = tf.reduce_sum(tf.square(gp_grds[1]), axis=[1])
-    norm    = tf.sqrt(tf.add(s1,s2))
-    gp      = tf.reduce_mean((norm-1.0)**2)
-    return gp
-
-  def rnd_latentLabels(self, batchsize):
-    """
-    generate batchsize random labels from {0,1}
-    """
-    lbls = tf.math.rint(tf.random.uniform(shape=(batchsize,1)))
-    return lbls
-
-  def train_step(self, real_data):
-    """
-    real_data has shape ((batches,data_dim,1),(batches,1))
-    """
-    # batch size
-    bs = tf.shape(real_data[0])[0]
-
-    pones =  tf.ones((bs,1))
-    nones = -tf.ones((bs,1))
-
-    # train discriminator a few times
-    for i in range(self.dupdates):
-      # train discriminator on real data
-      with tf.GradientTape() as tape:
-        preds   = self.discriminator(real_data, training=True)
-        d_lossR = self.loss_fn(nones, preds)
-        if self.gradpenalty:
-          gp      = self.grad_penalty(real_data)
-          d_lossR += gp * self.gp_weight
-        grads   = tape.gradient(d_lossR, self.discriminator.trainable_weights)
-        self.optD.apply_gradients(zip(grads,
-                                      self.discriminator.trainable_weights))
-
-      # train discriminator on fake data
-      with tf.GradientTape() as tape:
-        # generate fake data
-        z = self.rnd_latentLabels(bs)
-        fake_data = self.generator(z, training=False)
-        # train
-        preds   = self.discriminator(fake_data, training=True)
-        d_lossG = self.loss_fn(pones, preds)
-        if self.gradpenalty:
-          gp      = self.grad_penalty(fake_data)
-          d_lossG += gp * self.gp_weight
-        grads   = tape.gradient(d_lossG, self.discriminator.trainable_weights)
-        self.optD.apply_gradients(zip(grads,
-                                      self.discriminator.trainable_weights))
-
-    ## unrolling discriminator ##
-    #  https://arxiv.org/pdf/1611.02163.pdf
-    # save state of discriminator and optimizer to reset afterwards
-    #d_wts  = self.discriminator.weights
-    #o_wts  = self.optD.weights
-    #unrols = 8
-    #for i in range(unrols):
-    #  with tf.GradientTape() as tape:
-    #    z = self.rnd_latentLabels(bs)
-    #    fake_data = self.generator(z, training=False)
-    #    preds     = self.discriminator(fake_data, training=True)
-    #    d_uloss   = self.loss_fn(pones, preds)
-    #    if self.gradpenalty:
-    #      gp      = self.grad_penalty(fake_data)
-    #      d_uloss += gp * self.gp_weight
-    #    grads = tape.gradient(d_uloss, self.discriminator.trainable_weights)
-    #    self.optD.apply_gradients(zip(grads,
-    #                                  self.discriminator.trainable_weights))
-
-    # train generator once
-    with tf.GradientTape() as tape:
-      # create misleading labels for generator
-      z = self.rnd_latentLabels(bs)
-      # train
-      fake_preds = self.discriminator(self.generator(z, training=True))
-      g_loss     = self.loss_fn(nones, fake_preds)
-      grads      = tape.gradient(g_loss, self.generator.trainable_weights)
-      self.optG.apply_gradients(zip(grads, self.generator.trainable_weights))
-
-    # reset discriminator and optimizer weights to before unrolling #
-    #for i in range(len(self.discriminator.weights)):
-    #  self.discriminator.weights[i].assign(d_wts[i])
-    #for i in range(len(self.optD.weights)):
-    #  self.optD.weights[i].assign(o_wts[i])
-
-    return {'d_loss_real':d_lossR, 'd_loss_fake':d_lossG, 'g_loss':g_loss}
-
-
-  def summary(self, line_length=None, positions=None, print_fn=None):
-    self.discriminator.summary(line_length, positions, print_fn)
-    self.generator.summary(line_length, positions, print_fn)
-    return
-
-### function definitions -------------------------------------------------------
-
-## returns a SpectralNormalzation of layer, if grad_penalty is False
-def _get_disc_layer(layer, grad_penalty):
-  if grad_penalty:
-    return layer
-  return SpectralNormalization(layer)
-
-## return a Conv1D layer with/without spectral normalization
-def _get_disc_conv1d(fltrs, filtersize, init, grad_penalty):
-  layr = layers.Conv1D(fltrs, filtersize,
-                       padding='same',
-                       kernel_initializer=init)
-  return _get_disc_layer(layr, grad_penalty)
-
-## return a Dense layer with/without spectral normalization
-def _get_disc_dense(fltrs, init, grad_penalty):
-  layr = layers.Dense(fltrs, kernel_initializer=init)
-  return _get_disc_layer(layr, grad_penalty)
-
-## builds discriminator
-def build_discriminator(data_dim, label_dim, blocks, fltrs, grad_penalty):
-  filtersize = 3
-  relualpha  = 0.2
-  init       = initializers.RandomNormal(mean=0.0, stddev=0.1)
-
-  # data and label inputs
-  din = layers.Input(shape=(data_dim,1))
-  lin = layers.Input(shape=(label_dim))
-
-  # linear projection of labels
-  oht = BinaryOneHotEncoding()(lin)
-  lpr = _get_disc_dense(data_dim*label_dim, init, grad_penalty)(oht)
-  lpr = layers.Reshape((data_dim, label_dim))(lpr)
-
-  # concatenate linear projection of labels to data
-  dout = layers.Concatenate()([din,lpr])
-
-  # convolution layer blocks - basically a densenet
-  for b in range(blocks):
-    # prefilter input features to reduce dimensionality
-    pft = _get_disc_conv1d(fltrs, 1, init, grad_penalty)(dout)
-    pft = layers.LeakyReLU(alpha=relualpha)(pft)
-    # convolution after prefilter
-    con = _get_disc_conv1d(fltrs, filtersize, init, grad_penalty)(pft)
-    act = layers.LeakyReLU(alpha=relualpha)(con)
-    if grad_penalty:
-      act = layers.LayerNormalization(center=False, scale=False)(act)
-    # concatenate input with activation post-conv
-    dout = layers.Concatenate()([dout,act])
-
-  # downsample features
-  dout = _get_disc_conv1d(fltrs, filtersize, init, grad_penalty)(dout)
-  dout = layers.LeakyReLU(alpha=relualpha)(dout)
-
-  # decision layer
-  flt  = layers.Flatten()(dout)
-  mout = _get_disc_dense(fltrs//2, init, grad_penalty)(flt)
-  mout = layers.LeakyReLU(alpha=relualpha)(mout)
-  mout = layers.Dense(1, kernel_initializer=init)(mout)
-  return Model(inputs=(din,lin), outputs=mout, name='discriminator')
+from gmcdp._version import __version__
+from gmcdp.gen1d    import CondGen1D
+from gmcdp.dis1d    import CondDis1D
+from gmcdp.gan1d    import GanOptimizer, CondGan1D
 
 
 ### write log data to output file
@@ -269,17 +80,11 @@ def get_real_data(filename, batchsize):
   data = data.shuffle(len(indatas)).batch(batchsize)
   return data
 
-### wasserstein loss function
-# implements 'earth mover' distance from https://arxiv.org/pdf/1701.07875.pdf
-# and https://arxiv.org/pdf/1704.00028.pdf
-@tf.function
-def wasserstein_loss(tlabs, plabs):
-  return tf.reduce_mean(tlabs * plabs)
 
 ### main -----------------------------------------------------------------------
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(
-                description='conditional generative adversarial network',
+                description='microbiome generative adversarial network',
                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   parser.add_argument('--version', action='version', version=__version__)
   parser.add_argument('--verbose', type=distutils.util.strtobool,
@@ -331,7 +136,7 @@ if __name__ == '__main__':
                       outdir=None,
                       data_dim=256,
                       label_dim=1,
-                      batch_size=32,
+                      batch_size=64,
                       gen_blocks=8,
                       disc_blocks=4,
                       n_filters=128,
@@ -348,52 +153,14 @@ if __name__ == '__main__':
   if not args.verbose:
     os.environ['TF_CPP_MIN_LOG_LEVEL']='1'
 
+
+  """
   # get 'real' labelled data
   train_data = get_real_data(args.file, args.batch_size)
   if args.verbose:
     print(train_data.element_spec)
 
-  # build discriminator and generator models
-  # sp implements spectral normalization of discriminator weights
-  #    https://arxiv.org/pdf/1802.05957.pdf
-  # gp implements gradient penalty for discriminator
-  #    https://arxiv.org/pdf/1704.00028.pdf
-  gradpenalty = False
-  if args.lipschitz == 'gp':
-    gradpenalty = True
-  discriminator = build_discriminator(args.data_dim,
-                                      args.label_dim,
-                                      args.disc_blocks,
-                                      args.n_filters,
-                                      gradpenalty)
-  generator     = buildGenerator(data_dim=args.data_dim,
-                                 data_blocks=args.gen_blocks,
-                                 data_filters=args.n_filters,
-                                 data_filtersize=3,
-                                 data_bias=False,
-                                 data_relu_alpha=0.2,
-                                 data_initializer=None,
-
-                                 label_dim=args.label_dim,
-                                 label_blocks=args.gen_blocks,
-                                 label_filters=args.n_filters,
-                                 label_bias=False,
-                                 label_relu_alpha=0.2,
-                                 label_initializer=None)
-
-  # build GAN
-  gan = biGAN(discriminator, generator, args.update_n, gradpenalty)
-
-  # set up optimizers
-  # implements 2-timescale update rule from https://arxiv.org/pdf/1706.08500.pdf
-  genr_lr = args.learn_rate
-  disc_lr = args.learn_rate_mult * genr_lr
-  genr_opt = optimizers.RMSprop(learning_rate=genr_lr)
-  disc_opt = optimizers.RMSprop(learning_rate=disc_lr)
-  if args.optimizer == 'adam':
-    genr_opt = optimizers.Adam(learning_rate=genr_lr, beta_1=0.5, beta_2=0.9)
-    disc_opt = optimizers.Adam(learning_rate=disc_lr, beta_1=0.5, beta_2=0.9)
-  gan.compile(disc_opt, genr_opt, wasserstein_loss)
+  ## XX
 
   if args.verbose:
     gan.summary()
@@ -429,3 +196,4 @@ if __name__ == '__main__':
 
   # save final generator model
   gan.generator.save(genfname)
+  """

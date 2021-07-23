@@ -7,7 +7,7 @@ from tensorflow.keras.layers import Layer
 import tensorflow as tf
 import math
 
-from wrappers import SpecNorm
+from .wrapr import SpecNorm
 
 
 @tf.function(experimental_relax_shapes=True)
