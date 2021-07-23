@@ -330,7 +330,7 @@ class DataNoise(ReluLayer):
     return inputs + rv
 
   def get_config(self):
-    config = super(EncodeLayer, self).get_config()
+    config = super(DataNoise, self).get_config()
     config.update({
       'dim' : self.dim,
     })
