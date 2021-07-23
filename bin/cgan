@@ -12,7 +12,11 @@ sys.path.append(libpath)
 import distutils.util
 import argparse
 import pandas
-import numpy
+import numpy as np
+import io
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 import tensorflow       as     tf
 from   tensorflow.data  import Dataset
@@ -23,17 +27,62 @@ from gmcdp.dis1d    import CondDis1D
 from gmcdp.gan1d    import GanOptimizer, CondGan1D
 
 
-### write log data to output file
+class PlotCallback(tf.keras.callbacks.Callback):
+  """
+  plot generated data
+  """
+  def __init__(self, ex_labels, log_dir='logs'):
+    self.writer = tf.summary.create_file_writer(log_dir + '/gen')
+    self.ex_labels = ex_labels
+    return
+
+  def plot_data(self, data):
+    x = np.arange(0,tf.shape(data)[1],1)
+    fig = plt.figure()
+    ax  = fig.add_subplot(111)
+    y   = data.numpy().transpose()
+    #y.sort(axis=0)
+    #y = np.flip(y, axis=0)
+    ax.plot(x, y, 'o', markersize=2, alpha=0.5)
+    ax.set_ylim([-5,+5])
+    return fig
+
+  def plot_to_image(self, plot):
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    plt.close(plot)
+    buf.seek(0)
+    image = tf.image.decode_png(buf.getvalue(), channels=4)
+    image = tf.expand_dims(image, 0)
+    return image
+
+  def on_epoch_end(self, epoch, logs=None):
+    # generate 10 example datas
+    ((dta,lbl),scr) = self.model(self.ex_labels)
+    fig = self.plot_data(dta)
+    img = self.plot_to_image(fig)
+    with self.writer.as_default():
+      tf.summary.image('GenData', img, step=epoch)
+    return
+
+
+
+
 def writelog(epoch, logs, outf):
+  """
+  write log data to output file
+  """
   outf.write(str(epoch))
   for k in logs.keys():
     outf.write(',{:.4e}'.format(logs[k]))
   outf.write('\n')
   return
 
-### saves generator model in genfname file (directory)
-### writes logs
+
 def store_model(epoch, logs, generator, genfname):
+  """
+  saves generator model to genfname directory
+  """
   # save logs
   lfname = genfname + '.log'
   if epoch == 0:
@@ -51,34 +100,42 @@ def store_model(epoch, logs, generator, genfname):
     generator.save(genfname + str(epoch))
   return
 
-### build Dataset from data file
-def get_real_data(filename, batchsize):
-  indatas = []
-  targets = []
-  with open(filename, 'r') as handle:
-    reader = csv.reader(handle)
-    # parse header
-    target_cols = []
-    indata_cols = []
-    headrow = next(reader)
-    for idx in range(len(headrow)):
-      label = headrow[idx]
-      if label == 'id':
-        continue
-      if label.find('target') == 0:
-        target_cols.append(idx)
-      else:
-        indata_cols.append(idx)
-    # parse data
-    for row in reader:
-      trgts = [ float(row[i]) for i in target_cols ]
-      datas = [ [float(row[i])] for i in indata_cols]
-      targets.append(trgts)
-      indatas.append(datas)
-  # package in tensorflow Dataset
-  data = Dataset.from_tensor_slices((indatas, targets))
-  data = data.shuffle(len(indatas)).batch(batchsize)
-  return data
+
+def get_real_data(filename, trainprop, batchsize):
+  """
+  build dataset from data file
+  """
+  # read initial data frame
+  dataframe = pandas.read_csv(filename)
+  # split dataframe into training and validation
+  train_dataframe = dataframe.sample(frac=trainprop)
+  valid_dataframe = dataframe.drop(train_dataframe.index)
+  # extract explanatory variables (aka, "data")
+  data_prefix = 'DTA'
+  data_ids = [ x for x in dataframe.columns if x.find(data_prefix) == 0 ]
+  train_xs = train_dataframe[data_ids].to_numpy(dtype=np.float32)
+  valid_xs = valid_dataframe[data_ids].to_numpy(dtype=np.float32)
+  # extract response variables (aka, "labels")
+  labl_prefix = 'LBL'
+  labl_ids = [ x for x in dataframe.columns if x.find(labl_prefix) == 0 ]
+  train_ys = train_dataframe[labl_ids].to_numpy(dtype=np.float32)
+  valid_ys = valid_dataframe[labl_ids].to_numpy(dtype=np.float32)
+  # store data shapes
+  train_xs_shape = train_xs.shape
+  train_ys_shape = train_ys.shape
+  valid_xs_shape = valid_xs.shape
+  valid_ys_shape = valid_ys.shape
+  # package into tensorflow
+  train_data = tf.data.Dataset.from_tensor_slices((train_xs, train_ys))
+  train_data = train_data.shuffle(buffer_size=train_xs_shape[0],
+                              reshuffle_each_iteration=True).batch(batchsize)
+  valid_data = tf.data.Dataset.from_tensor_slices((valid_xs, valid_ys))
+  valid_data = valid_data.shuffle(buffer_size=valid_xs.shape[0],
+                              reshuffle_each_iteration=True).batch(batchsize)
+  # done
+  return (train_ys[0:10],
+          train_xs_shape, train_ys_shape, train_data,
+          valid_xs_shape, valid_ys_shape, valid_data)
 
 
 ### main -----------------------------------------------------------------------
@@ -88,64 +145,81 @@ if __name__ == '__main__':
                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   parser.add_argument('--version', action='version', version=__version__)
   parser.add_argument('--verbose', type=distutils.util.strtobool,
-                      dest='verbose', help='runtime informatoin?',
+                      dest='verbose', help='runtime information?',
                       metavar='y|n')
 
   # data source
-  parser.add_argument('-f', '--file', dest='file', help='data file',
-                      metavar='DATA.csv', required=True)
-  parser.add_argument('--outdir', dest='outdir',
-                      help='output directory', metavar='OUT')
-  parser.add_argument('--data_dim', dest='data_dim', type=int,
-                      help='size of data vector', metavar='N')
-  parser.add_argument('--label_dim', dest='label_dim', type=int,
-                      help='number of labels', metavar='N')
+  group = parser.add_argument_group('data')
+  group.add_argument('-f', '--file', dest='file', help='data file',
+                     metavar='DATA.csv', required=True)
 
-  # data pre-processing
-  parser.add_argument('--batch_size', dest='batch_size', type=int,
-                      help='training batch size', metavar='N')
+  # output
+  group = parser.add_argument_group('output')
+  group.add_argument('--outdir', dest='outdir',
+                     help='output directory', metavar='OUT')
+  group.add_argument('--tensorboard', type=distutils.util.strtobool,
+                     dest='tensorboard', help='tensorboard log?',
+                     metavar='y|n')
 
   # neural network architecture
-  parser.add_argument('--gen_blocks', dest='gen_blocks', type=int,
-                      help='number of generator blocks', metavar='N')
-  parser.add_argument('--disc_blocks', dest='disc_blocks', type=int,
-                      help='number of discriminator blocks', metavar='N')
-  parser.add_argument('--filters', dest='n_filters', type=int,
-                      help='number of neurons or filters', metavar='N')
-  parser.add_argument('--lipschitz', dest='lipschitz', choices=['gp', 'sn'],
-                      help='lipschitz constraint to use')
+  group = parser.add_argument_group('network')
+  group.add_argument('--gen_attn_blocks', dest='gen_attn_blocks', type=int,
+                     help='number of generator attention blocks', metavar='N')
+  group.add_argument('--gen_attn_heads', dest='gen_attn_heads', type=int,
+                     help='number of generator attention heads', metavar='N')
+  group.add_argument('--gen_data_dim', dest='gen_data_dim', type=int,
+                     help='dimension of generator data representation',
+                     metavar='N')
+  group.add_argument('--gen_dropout', dest='gen_dropout', type=float,
+                     help='generator dropout proportion', metavar='N')
+
+  group.add_argument('--dis_attn_blocks', dest='dis_attn_blocks', type=int,
+                     help='number of discriminator attention blocks',
+                     metavar='N')
+  group.add_argument('--dis_attn_heads', dest='dis_attn_heads', type=int,
+                     help='number of discriminator attention heads',
+                     metavar='N')
+  group.add_argument('--dis_label_dim', dest='dis_label_dim', type=int,
+                     help='dimension of discriminator label representation',
+                     metavar='N')
+  group.add_argument('--dis_dropout', dest='dis_dropout', type=float,
+                     help='discriminator dropout proportion', metavar='N')
 
   # training regime
-  parser.add_argument('--epochs', dest='epochs', type=int,
-                      help='number of training epochs', metavar='N')
-  parser.add_argument('--optimizer', dest='optimizer',
-                      choices=['adam', 'rmsprop'],
-                      help='optimizer to use')
-  parser.add_argument('--learning_rate', dest='learn_rate', type=float,
-                      help='base learning rate for optimizer', metavar='N')
-  parser.add_argument('--learning_rate_mult', dest='learn_rate_mult',
-                      type=float,
-                      help='discriminator learning rate multiplier',
-                      metavar='N')
-  parser.add_argument('--update_n', dest='update_n', type=int,
-                      help='update discriminator N-times per generator',
-                      metavar='N')
+  group = parser.add_argument_group('training')
+  group.add_argument('--train_prop', dest='train_prop', type=float,
+                     help='training data proportion', metavar='N')
+  group.add_argument('--batch_size', dest='batch_size', type=int,
+                     help='training batch size', metavar='N')
+  group.add_argument('--epochs', dest='epochs', type=int,
+                     help='number of training epochs', metavar='N')
+  group.add_argument('--learning_rate', dest='learn_rate', type=float,
+                     help='base learning rate for generator', metavar='N')
+  group.add_argument('--learning_rate_mult', dest='learn_rate_mult',
+                     type=float,
+                     help='discriminator learning rate multiplier',
+                     metavar='N')
 
   parser.set_defaults(verbose=True,
                       file=None,
                       outdir=None,
-                      data_dim=256,
-                      label_dim=1,
+                      tensorboard=True,
+
+                      gen_attn_blocks=8,
+                      gen_attn_heads=4,
+                      gen_data_dim=8,
+                      gen_dropout=0.0,
+
+                      dis_attn_blocks=8,
+                      dis_attn_heads=4,
+                      dis_label_dim=4,
+                      dis_dropout=0.2,
+
+                      train_prop=0.8,
                       batch_size=64,
-                      gen_blocks=8,
-                      disc_blocks=4,
-                      n_filters=128,
-                      lipschitz='sn',
-                      optimizer='adam',
+                      epochs=10000,
                       learn_rate=1.0e-5,
-                      learn_rate_mult=2.0,
-                      update_n=2,
-                      epochs=1000)
+                      learn_rate_mult=0.1)
 
   args = parser.parse_args()
 
@@ -153,17 +227,88 @@ if __name__ == '__main__':
   if not args.verbose:
     os.environ['TF_CPP_MIN_LOG_LEVEL']='1'
 
-
-  """
   # get 'real' labelled data
-  train_data = get_real_data(args.file, args.batch_size)
-  if args.verbose:
-    print(train_data.element_spec)
+  example_labels, \
+  train_data_shape, \
+  train_labl_shape, \
+  train_data, \
+  valid_data_shape, \
+  valid_labl_shape, \
+  valid_data = get_real_data(filename=args.file,
+                         trainprop=args.train_prop,
+                         batchsize=args.batch_size)
 
-  ## XX
+  if args.verbose:
+    print('PARSED TRAINING DATA')
+    print('  file name {}'.format(args.file))
+    print('  train proportion {}'.format(args.train_prop))
+    print('  batch size {}'.format(args.batch_size))
+    print('  train data shape {}'.format(train_data_shape))
+    print('  train labl shape {}'.format(train_labl_shape))
+    print('  valid data shape {}'.format(valid_data_shape))
+    print('  valid labl shape {}'.format(valid_labl_shape))
+    print('  train dataset {}'.format(train_data.element_spec))
+    print('  valid dataset {}'.format(valid_data.element_spec))
+
+  # create generator
+  gen = CondGen1D(input_shape=(train_labl_shape[-1],),
+                  width=train_data_shape[-1],
+                  attn_hds=args.gen_attn_heads,
+                  nattnblocks=args.gen_attn_blocks,
+                  datadim=args.gen_data_dim,
+                  dropout=args.gen_dropout)
+  if args.verbose:
+    print('CREATED GENERATOR')
+    gen.summary(positions=[0.4, 0.7, 0.8, 1.0])
+
+  # create discriminator
+  dis = CondDis1D(data_width=train_data_shape[-1],
+                  label_width=train_labl_shape[-1],
+                  attn_hds=args.dis_attn_heads,
+                  nattnblocks=args.dis_attn_blocks,
+                  lbldim=args.dis_label_dim,
+                  dropout=args.dis_dropout)
+  if args.verbose:
+    print('CREATED DISCRIMINATOR')
+    dis.summary(positions=[0.4, 0.7, 0.8, 1.0])
+
+  # create optimizer
+  steps_per_epoch = int(train_data_shape[0] / args.batch_size)
+  decay_steps     = steps_per_epoch * 100  # reduce lr every 100 epochs
+  total_steps     = steps_per_epoch * args.epochs
+  decay_rate      = (1.0e-7/args.learn_rate)**(decay_steps/total_steps)
+
+  gsch = tf.keras.optimizers.schedules.ExponentialDecay(\
+                  initial_learning_rate=args.learn_rate,
+                  decay_steps=decay_steps,
+                  decay_rate=decay_rate,
+                  staircase=True)
+  dsch = tf.keras.optimizers.schedules.ExponentialDecay(\
+                  initial_learning_rate=args.learn_rate * args.learn_rate_mult,
+                  decay_steps=decay_steps*2,
+                  decay_rate=decay_rate,
+                  staircase=True)
+  gopt = tf.keras.optimizers.SGD(learning_rate=gsch,
+                                 momentum=0.8,
+                                 nesterov=True)
+  dopt = tf.keras.optimizers.SGD(learning_rate=dsch,
+                                 momentum=0.8,
+                                 nesterov=True)
+  opt  = GanOptimizer(gopt, dopt)
 
   if args.verbose:
-    gan.summary()
+    print('CREATED GAN OPTIMIZER')
+    print('  gen init learn rate {:.2e}'.format(args.learn_rate))
+    print('  dis init learn rate {:.2e}'.format(\
+                                  args.learn_rate*args.learn_rate_mult))
+    print('  exp decay rate {}'.format(decay_rate))
+
+  # create gan
+  gan = CondGan1D(generator=gen, discriminator=dis)
+  gan.compile(optimizer=opt)
+
+  if args.verbose:
+    print('COMPILED GAN')
 
   # set up output base name
   outbasename = args.file
@@ -176,24 +321,33 @@ if __name__ == '__main__':
     sys.exit(1)
   outbasename = os.path.join(args.outdir, basename)
 
-  # set up checkpoints
-  #ckptfname = outbasename + '.ckpt'
-  #ckpt = callbacks.ModelCheckpoint(ckptfname, monitor='g_loss')
+  # store callback functions
+  callbacks = []
 
   # set up tensorboard
-  #tbdir = outbasename + '.tblog'
-  #tb = callbacks.TensorBoard(log_dir=tbdir)
+  if args.tensorboard:
+    tbdir = outbasename + '.tblog'
+    callbacks.append(tf.keras.callbacks.TensorBoard(log_dir=tbdir))
+    callbacks.append(PlotCallback(example_labels, log_dir=tbdir))
+    if args.verbose:
+      print('TENSORBOARD LOG {}'.format(tbdir))
 
   # set up generator logging
   genfname  = outbasename + '.gen.model'
-  cbk = callbacks.LambdaCallback(on_epoch_end=lambda epoch,logs: \
-                                              store_model(epoch, logs,
-                                                          gan.generator,
-                                                          genfname))
+  callbacks.append(tf.keras.callbacks.LambdaCallback(\
+                                            on_epoch_end=lambda epoch,logs: \
+                                            store_model(epoch, logs,
+                                                        gan.generator,
+                                                        genfname)))
+  if args.verbose:
+    print('GENERATOR MODEL LOG {}'.format(genfname))
 
   # fit generative adverserial network
-  gan.fit(train_data, epochs=args.epochs, callbacks=[cbk], verbose=args.verbose)
+  gan.fit(train_data,
+          epochs=args.epochs,
+          validation_data=valid_data,
+          callbacks=callbacks,
+          verbose=args.verbose)
 
   # save final generator model
   gan.generator.save(genfname)
-  """

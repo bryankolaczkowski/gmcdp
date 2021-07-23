@@ -2,6 +2,7 @@ import scipy.stats
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
+import pandas
 
 rng = np.random.default_rng()
 
@@ -105,5 +106,26 @@ def gen_dataset(ndata, ntaxa=256, plot=True):
   return (tf.convert_to_tensor(norm_data, dtype=tf.float32), all_lbls_oh)
 
 if __name__ == '__main__':
-  gen_dataset(20)
-
+  dta_prefix = 'DTA'
+  lbl_prefix = 'LBL'
+  ndata = 16344
+  # generate data
+  datat,lablt = gen_dataset(ndata, plot=False)
+  # convert to numpy
+  datan = datat.numpy()
+  labln = lablt.numpy()
+  print(datan.shape, labln.shape)
+  # create column header
+  cols = []
+  for i in range(datan.shape[-1]):
+    cols.append(dta_prefix + str(i))
+  for i in range(labln.shape[-1]):
+    cols.append(lbl_prefix + str(i))
+  # package into dataframe
+  dataframe = pandas.DataFrame(np.concatenate([datan, labln], axis=-1),
+                               columns=cols)
+  print(dataframe.head())
+  # write file
+  outfname = 'data.csv'
+  dataframe.to_csv(outfname, index=False)
+  print('wrote {}'.format(outfname))
