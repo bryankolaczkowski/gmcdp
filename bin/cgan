@@ -337,7 +337,7 @@ if __name__ == '__main__':
   callbacks.append(tf.keras.callbacks.LambdaCallback(\
                                             on_epoch_end=lambda epoch,logs: \
                                             store_model(epoch, logs,
-                                                        gan.generator,
+                                                        gan.genr,
                                                         genfname)))
   if args.verbose:
     print('GENERATOR MODEL LOG {}'.format(genfname))
@@ -350,4 +350,4 @@ if __name__ == '__main__':
           verbose=args.verbose)
 
   # save final generator model
-  gan.generator.save(genfname)
+  gan.genr.save(genfname)
