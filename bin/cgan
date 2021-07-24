@@ -41,8 +41,8 @@ class PlotCallback(tf.keras.callbacks.Callback):
     fig = plt.figure()
     ax  = fig.add_subplot(111)
     y   = data.numpy().transpose()
-    #y.sort(axis=0)
-    #y = np.flip(y, axis=0)
+    y.sort(axis=0)
+    y = np.flip(y, axis=0)
     ax.plot(x, y, 'o', markersize=2, alpha=0.5)
     ax.set_ylim([-5,+5])
     return fig
@@ -57,15 +57,13 @@ class PlotCallback(tf.keras.callbacks.Callback):
     return image
 
   def on_epoch_end(self, epoch, logs=None):
-    # generate 10 example datas
+    # generate example datas
     ((dta,lbl),scr) = self.model(self.ex_labels)
     fig = self.plot_data(dta)
     img = self.plot_to_image(fig)
     with self.writer.as_default():
       tf.summary.image('GenData', img, step=epoch)
     return
-
-
 
 
 def writelog(epoch, logs, outf):
