@@ -272,7 +272,7 @@ if __name__ == '__main__':
 
   # create optimizer
   steps_per_epoch = int(train_data_shape[0] / args.batch_size)
-  decay_steps     = steps_per_epoch * 100  # reduce lr every 100 epochs
+  decay_steps     = steps_per_epoch * 50  # reduce lr every 50 epochs
   total_steps     = steps_per_epoch * args.epochs
   decay_rate      = (1.0e-7/args.learn_rate)**(decay_steps/total_steps)
 
