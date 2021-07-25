@@ -6,7 +6,7 @@ import pandas
 
 rng = np.random.default_rng()
 
-def gen_dataset(ndata, ntaxa=256, plot=True):
+def gen_dataset(ndata, ntaxa=256):
   """
   generates a full example dataset
   """
@@ -86,22 +86,6 @@ def gen_dataset(ndata, ntaxa=256, plot=True):
   norm_data.sort(axis=1)
   norm_data = np.flip(norm_data, axis=1)
 
-  ## expand channels using 'random walk', if needed
-  #next_data = norm_data
-  #for _ in np.arange(1,channels):
-  #  next_data = np.add(next_data, rng.normal(0, 0.1, size=next_data.shape))
-  #  next_data.sort(axis=1)
-  #  next_data = np.flip(next_data, axis=1)
-  #  norm_data = np.append(norm_data, next_data, axis=-1)
-
-  ## plot data (optional)
-  if plot:
-    x = np.linspace(1,ntaxa,num=ntaxa)
-    # plot data sets
-    for i in np.arange(ndata):
-      plt.plot(x, norm_data[i,:], 'o', markersize=2)
-    plt.ylim([-5,+5])
-    plt.show()
   ## return (data,labels) tensors
   return (tf.convert_to_tensor(norm_data, dtype=tf.float32), all_lbls_oh)
 
@@ -110,7 +94,7 @@ if __name__ == '__main__':
   lbl_prefix = 'LBL'
   ndata = 16344
   # generate data
-  datat,lablt = gen_dataset(ndata, plot=False)
+  datat,lablt = gen_dataset(ndata)
   # convert to numpy
   datan = datat.numpy()
   labln = lablt.numpy()
