@@ -2,13 +2,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorflow.keras import initializers, regularizers, constraints, Model
-from tensorflow.keras.layers import Layer
+from tensorflow.keras import Model
 import tensorflow as tf
 
-from .gen1d import EncodeLayer, DecodeGen, PosMaskedMHABlock
-from .gen1d import gnact
-from .wrapr import SpecNorm
+from .mcgen1d import EncodeLayer, DecodeGen, PosMaskedMHABlock
+from .activ   import gnact
+from .wrapr   import SpecNorm
 
 
 class EncodeDis(EncodeLayer):
@@ -88,34 +87,3 @@ def CondDis1D(data_width,
                             name='ma{}'.format(i))(out)
   out = DecodeDis(width=data_width, name='dec')(out)
   return Model(inputs=(in1,in2,in3), outputs=out)
-
-
-if __name__ == '__main__':
-  """
-  module example
-  """
-  import sys
-  sys.path.append("../tests")
-  import test_data_generator
-  from cond_generator_1d import CondGen1D
-
-  ndata = 16
-
-  # generate simulated data and labels
-  data,lbls = test_data_generator.gen_dataset(ndata, plot=False)
-  print(data,lbls)
-
-  # create a little 'generator model' that just maps the label vector
-  # to data space using a linear map
-  input_shape  = tf.shape(lbls)
-  output_shape = tf.shape(data)
-  gen = CondGen1D((input_shape[1],), output_shape[1])
-  gen.summary(positions=[0.4, 0.7, 0.8, 1.0])
-  out = gen(lbls)
-  print(out)
-
-  # create a little 'discriminator model'
-  dis = CondDis1D(output_shape[1], input_shape[1])
-  dis.summary(positions=[0.4, 0.7, 0.8, 1.0])
-  out = dis((out[0],out[0],out[1]))
-  print(out)

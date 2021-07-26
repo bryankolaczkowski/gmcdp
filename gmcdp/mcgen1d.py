@@ -2,105 +2,17 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorflow.keras import initializers, regularizers, constraints, Model
+from tensorflow.keras        import Model
 from tensorflow.keras.layers import Layer
 import tensorflow as tf
 import math
 
+from .activ import gnact
+from .layrs import WidthLayer, ReluLayer
 from .wrapr import SpecNorm
 
 
-@tf.function(experimental_relax_shapes=True)
-def gnact(x, alpha=0.4):
-  """
-  2-sided 'leaky-rectified' linear activation
-  scales x by alpha*x whenever |x| > (1-alpha)
-  """
-  v  = 1.0 - alpha
-  b  = v * v
-  # leaky-rectify positive values
-  c = tf.math.greater(x, v)
-  r = tf.where(c, alpha*x+b, x)
-  # leaky-rectify negative values
-  c = tf.math.less(r, -v)
-  r = tf.where(c, alpha*r-b, r)
-  return r
-
 ## BASE CLASSES ################################################################
-
-class ConfigLayer(Layer):
-  """
-  base class for layers having sub-layers requiring configuration
-  """
-  def __init__(self,
-               use_bias=True,
-               kernel_initializer='glorot_normal',
-               bias_initializer='zeros',
-               kernel_regularizer=None,
-               bias_regularizer=None,
-               kernel_constraint=None,
-               bias_constraint=None,
-               **kwargs):
-    super(ConfigLayer, self).__init__(**kwargs)
-    # config copy
-    self.use_bias           = use_bias
-    self.kernel_initializer = initializers.get(kernel_initializer)
-    self.bias_initializer   = initializers.get(bias_initializer)
-    self.kernel_regularizer = regularizers.get(kernel_regularizer)
-    self.bias_regularizer   = regularizers.get(bias_regularizer)
-    self.kernel_constraint  = constraints.get(kernel_constraint)
-    self.bias_constraint    = constraints.get(bias_constraint)
-    return
-
-  def get_config(self):
-    config = super(ConfigLayer, self).get_config()
-    config.update({
-      'use_bias'           : self.use_bias,
-      'kernel_initializer' : initializers.serialize(self.kernel_initializer),
-      'bias_initializer'   : initializers.serialize(self.bias_initializer),
-      'kernel_regularizer' : regularizers.serialize(self.kernel_regularizer),
-      'bias_regularizer'   : regularizers.serialize(self.bias_regularizer),
-      'kernel_constraint'  : constraints.serialize(self.kernel_constraint),
-      'bias_constraint'    : constraints.serialize(self.bias_constraint),
-    })
-    return config
-
-
-class WidthLayer(ConfigLayer):
-  """
-  base class for configurable layer with data width
-  """
-  def __init__(self, width, *args, **kwargs):
-    super(WidthLayer, self).__init__(*args, **kwargs)
-    # config copy
-    self.width = width
-    return
-
-  def get_config(self):
-    config = super(WidthLayer, self).get_config()
-    config.update({
-      'width' : self.width,
-    })
-    return config
-
-
-class ReluLayer(WidthLayer):
-  """
-  base class for layers with leaky-ReLU activations
-  """
-  def __init__(self, relu_alpha=0.4, *args, **kwargs):
-    super(ReluLayer, self).__init__(*args, **kwargs)
-    # config copy
-    self.relu_alpha = relu_alpha
-    return
-
-  def get_config(self):
-    config = super(ReluLayer, self).get_config()
-    config.update({
-      'relu_alpha' : self.relu_alpha,
-    })
-    return config
-
 
 class EncodeLayer(WidthLayer):
   """
@@ -428,27 +340,3 @@ def CondGen1D(input_shape,
   ## data decoding
   output = DecodeGen(width=width, dropout=dropout, name='decd')(output)
   return Model(inputs=inputs, outputs=(output,inputs))
-
-
-if __name__ == '__main__':
-  """
-  module test (well, example, anyway)
-  """
-  import sys
-  sys.path.append("../tests")
-  import test_data_generator
-
-  ndata = 4
-
-  # generate simulated data and labels
-  data,lbls = test_data_generator.gen_dataset(ndata, plot=False)
-  print(data,lbls)
-
-  # create a little 'generator model' that just maps the label vector
-  # to data space using a linear map
-  input_shape  = tf.shape(lbls)
-  output_shape = tf.shape(data)
-  mdl = CondGen1D((input_shape[1],), output_shape[1])
-  mdl.summary(positions=[0.4, 0.7, 0.8, 1.0])
-  out = mdl(lbls)
-  print(out)
