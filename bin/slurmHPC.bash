@@ -20,7 +20,7 @@
 # time resources
 #SBATCH  --time=96:00:00
 
-module load tensorflow
+module load tensorflow/2.5.0
 
 echo "date $(date)"
 echo "host $(hostname -s)"
