@@ -3,10 +3,9 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-import math
 
 @tf.function(experimental_relax_shapes=True)
-def gnact(x, alpha=0.4):
+def lrsact(x, alpha=0.4):
   """
   2-sided 'leaky-rectified' linear activation
   scales x by alpha*x whenever |x| > (1-alpha)

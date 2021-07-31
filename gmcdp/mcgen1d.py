@@ -7,7 +7,7 @@ from tensorflow.keras.layers import Layer
 import tensorflow as tf
 import math
 
-from .activ import gnact
+from .activ import lrsact
 from .layrs import WidthLayer, ReluLayer
 from .wrapr import SpecNorm
 
@@ -107,8 +107,8 @@ class DecodeGen(ReluLayer):
     return self.flt(self.out(inputs))
 
   def call(self, inputs):
-    x = self.dot(gnact(self.cn1(inputs), alpha=self.relu_alpha))
-    x = self.dot(gnact(self.cn2(x),      alpha=self.relu_alpha))
+    x = self.dot(lrsact(self.cn1(inputs), alpha=self.relu_alpha))
+    x = self.dot(lrsact(self.cn2(x),      alpha=self.relu_alpha))
     return self._finalize(x)
 
   def get_config(self):
@@ -175,8 +175,8 @@ class PosMaskedMHABlock(ReluLayer):
     a = inputs + (a * self.msk)
     # sub-block 2 - pre-lyrnorm, feed-forward, residual
     b = self.ln2(a)
-    b = gnact(self.ff1(b), alpha=self.relu_alpha)
-    b = gnact(self.ff2(b), alpha=self.relu_alpha)
+    b = lrsact(self.ff1(b), alpha=self.relu_alpha)
+    b = lrsact(self.ff2(b), alpha=self.relu_alpha)
     b = a + (b * self.msk)
     return b
 
@@ -234,7 +234,7 @@ class DataNoise(ReluLayer):
 
   def call(self, inputs):
     bs = tf.shape(inputs)[0]
-    sd = gnact(self.stdv(inputs), alpha=self.relu_alpha) # project noise stdvs
+    sd = lrsact(self.stdv(inputs), alpha=self.relu_alpha) # project noise stdvs
     # generate masked random vector affecting only last data dimension
     rv = tf.random.normal(mean=0.0,
                           stddev=sd,

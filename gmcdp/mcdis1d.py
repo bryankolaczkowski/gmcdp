@@ -6,7 +6,6 @@ from tensorflow.keras import Model
 import tensorflow as tf
 
 from .mcgen1d import EncodeLayer, DecodeGen, PosMaskedMHABlock
-from .activ   import gnact
 from .wrapr   import SpecNorm
 
 
