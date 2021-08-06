@@ -92,9 +92,7 @@ def store_model(epoch, logs, generator, genfname):
       writelog(epoch, logs, outf)
   # save generator model
   every = 500
-  if epoch <= 1000:
-    every = 100
-  if epoch % every == 0:
+  if epoch+1 % every == 0:
     generator.save(genfname + str(epoch))
   return
 
